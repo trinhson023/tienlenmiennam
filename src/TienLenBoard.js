@@ -101,7 +101,9 @@ class TienLenBoard extends Component {
       !this.props.ctx.gameover
     ) {
       playTurnSound();
-      this.showEffect("turn", "ĐẾN LƯỢT BẠN", 650);
+      if (!centerChanged) {
+        this.showEffect("turn", "ĐẾN LƯỢT BẠN", 650);
+      }
     }
   }
 
