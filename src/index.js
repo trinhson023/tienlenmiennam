@@ -8,12 +8,14 @@ import "./final-polish.scss";
 import "./integration-fixes.scss";
 import { default as App } from "./App";
 import LobbyView from "./components/LobbyView";
+import LobbyIdentityGuard from "./components/LobbyIdentityGuard";
 import * as serviceWorker from "./serviceWorker";
 import { LOBBY } from "./config";
 
 if (LOBBY) {
   ReactDOM.render(
     <React.StrictMode>
+      <LobbyIdentityGuard />
       <LobbyView />
     </React.StrictMode>,
     document.getElementById("root")
