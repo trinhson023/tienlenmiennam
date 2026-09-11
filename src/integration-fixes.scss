@@ -1,0 +1,105 @@
+/* Small integration layer loaded after final-polish.scss. */
+
+.music-room__panel--hidden {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(12px) scale(0.98);
+}
+
+.music-room__panel {
+  transform-origin: right bottom;
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
+}
+
+.music-room__unlock {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 5;
+  transform: translate(-50%, -50%);
+  margin: 0 !important;
+  padding: 9px 15px !important;
+  border: 1px solid rgba(255, 218, 103, 0.72) !important;
+  border-radius: 999px !important;
+  background: rgba(4, 23, 15, 0.94) !important;
+  color: #ffebb0 !important;
+  font-size: 0.78rem !important;
+  font-weight: 900 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55), 0 0 22px rgba(255, 211, 81, 0.18) !important;
+}
+
+@keyframes cardFlyFromTop {
+  0% { opacity: 0; transform: translateY(-120px) scale(0.78) rotate(-8deg); }
+  65% { opacity: 1; transform: translateY(6px) scale(1.03) rotate(2deg); }
+  100% { transform: translateY(0) scale(1) rotate(0); }
+}
+
+@keyframes cardFlyFromLeft {
+  0% { opacity: 0; transform: translateX(-180px) translateY(-10px) scale(0.78) rotate(-12deg); }
+  65% { opacity: 1; transform: translateX(7px) scale(1.03) rotate(2deg); }
+  100% { transform: translateX(0) scale(1) rotate(0); }
+}
+
+@keyframes cardFlyFromRight {
+  0% { opacity: 0; transform: translateX(180px) translateY(-10px) scale(0.78) rotate(12deg); }
+  65% { opacity: 1; transform: translateX(-7px) scale(1.03) rotate(-2deg); }
+  100% { transform: translateX(0) scale(1) rotate(0); }
+}
+
+@keyframes cardFlyFromSelf {
+  0% { opacity: 0; transform: translateY(145px) scale(0.82) rotate(5deg); }
+  65% { opacity: 1; transform: translateY(-6px) scale(1.03) rotate(-1deg); }
+  100% { transform: translateY(0) scale(1) rotate(0); }
+}
+
+.game-vfx-play .premium-center-zone--from-top .premium-center-cards .card {
+  animation-name: cardFlyFromTop !important;
+}
+
+.game-vfx-play .premium-center-zone--from-left .premium-center-cards .card {
+  animation-name: cardFlyFromLeft !important;
+}
+
+.game-vfx-play .premium-center-zone--from-right .premium-center-cards .card {
+  animation-name: cardFlyFromRight !important;
+}
+
+.game-vfx-play .premium-center-zone--from-self .premium-center-cards .card {
+  animation-name: cardFlyFromSelf !important;
+}
+
+.game-vfx-play .premium-center-cards li:nth-child(2) .card,
+.game-vfx-chop .premium-center-cards li:nth-child(2) .card {
+  animation-delay: 0.035s;
+}
+
+.game-vfx-play .premium-center-cards li:nth-child(3) .card,
+.game-vfx-chop .premium-center-cards li:nth-child(3) .card {
+  animation-delay: 0.07s;
+}
+
+.game-vfx-play .premium-center-cards li:nth-child(4) .card,
+.game-vfx-chop .premium-center-cards li:nth-child(4) .card {
+  animation-delay: 0.105s;
+}
+
+.game-vfx-play .premium-center-cards li:nth-child(5) .card,
+.game-vfx-chop .premium-center-cards li:nth-child(5) .card {
+  animation-delay: 0.14s;
+}
+
+.game-vfx-play .premium-center-cards li:nth-child(6) .card,
+.game-vfx-chop .premium-center-cards li:nth-child(6) .card {
+  animation-delay: 0.175s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-event__label,
+  .game-event__shock,
+  .premium-center-cards .card,
+  .premium-control-staging .card,
+  .current-player-status.premium-player-card {
+    animation: none !important;
+  }
+}
