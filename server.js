@@ -16,7 +16,27 @@ import {
 } from "./bot";
 
 const PORT = process.env.PORT || 8000;
+const BOOT_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const server = Server({ games: [TienLen] });
+
+// Trace unexpected room deletion. This is intentionally noisy only when wipe()
+// is actually called, so we can distinguish a DB wipe from a process restart.
+if (server.db && typeof server.db.wipe === "function") {
+  const originalWipe = server.db.wipe.bind(server.db);
+  server.db.wipe = async matchID => {
+    console.warn(`[DB WIPE][boot=${BOOT_ID}] match=${matchID}`);
+    console.warn(new Error("wipe trace").stack);
+    return originalWipe(matchID);
+  };
+}
+
+process.on("uncaughtException", err => {
+  console.error(`[UNCAUGHT][boot=${BOOT_ID}]`, err);
+});
+
+process.on("unhandledRejection", reason => {
+  console.error(`[UNHANDLED_REJECTION][boot=${BOOT_ID}]`, reason);
+});
 
 function getJson(url) {
   return new Promise((resolve, reject) => {
@@ -90,6 +110,8 @@ server.app.use(async (ctx, next) => {
       success: true,
       port: PORT,
       hostIp: process.env.HOST_IP || null,
+      bootId: BOOT_ID,
+      storage: process.env.FLATFILE_DIR ? "flatfile" : "memory",
     };
     return;
   }
@@ -204,7 +226,11 @@ server.run(PORT, () => {
         next
       )
   );
-  console.log(`Server Tiến Lên đang chạy tại port ${PORT}`);
+  console.log(
+    `Server Tiến Lên đang chạy tại port ${PORT} | boot=${BOOT_ID} | storage=${
+      process.env.FLATFILE_DIR ? `flatfile:${process.env.FLATFILE_DIR}` : "memory"
+    }`
+  );
   setServerDb(server.db);
   startBotWatchdog(PORT);
 });
