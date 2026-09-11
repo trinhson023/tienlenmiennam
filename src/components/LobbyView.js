@@ -16,12 +16,13 @@ GameTienLen.minPlayers = 2;
 GameTienLen.maxPlayers = 4;
 
 const { protocol, hostname, port } = window.location;
+const portPart = port ? `:${port}` : "";
 
 let gameServer = APP_PRODUCTION
-  ? `${protocol}//${hostname}:${port}`
+  ? `${protocol}//${hostname}${portPart}`
   : GAME_SERVER_URL;
 let lobbyServer = APP_PRODUCTION
-  ? `${protocol}//${hostname}:${port}`
+  ? `${protocol}//${hostname}${portPart}`
   : WEB_SERVER_URL;
 
 const importedGames = [{ game: GameTienLen, board: BoardTienLen }];
@@ -30,6 +31,19 @@ function QuickBotHelper() {
   const [activeRooms, setActiveRooms] = useState([]);
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
+  const [networkIp, setNetworkIp] = useState("");
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/server-info")
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.hostIp) {
+          setNetworkIp(data.hostIp);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const fetchRooms = async () => {
     try {
@@ -271,12 +285,71 @@ function QuickBotHelper() {
     }
   };
 
+  const currentOrigin =
+    window.location.origin || `${protocol}//${hostname}${portPart}`;
+  const isLocalhost =
+    hostname === "localhost" || hostname === "127.0.0.1";
+  const shareUrl =
+    isLocalhost && networkIp
+      ? `${protocol}//${networkIp}${portPart || ":8000"}`
+      : currentOrigin;
+
+  const handleCopyShareUrl = () => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(shareUrl);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
+  };
+
   return (
     <div className="bot-panel">
       <div className="bot-panel-header">
         <h3>🤖 Quản Lý Bàn Chơi & Trợ Lý Bot AI</h3>
       </div>
       <div className="bot-panel-body">
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: "8px",
+            padding: "8px 14px",
+            marginBottom: "14px",
+            borderRadius: "12px",
+            background: "rgba(16, 185, 129, 0.12)",
+            border: "1px solid rgba(52, 211, 153, 0.35)",
+            fontSize: "13px",
+            color: "#d1fae5",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span style={{ fontSize: "16px" }}>📶</span>
+            <span>
+              <strong>Mạng LAN / Wi-Fi:</strong> Mời bạn bè cùng Wi-Fi vào link:{" "}
+              <strong style={{ color: "#6ee7b7", textDecoration: "underline" }}>
+                {shareUrl}
+              </strong>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleCopyShareUrl}
+            style={{
+              padding: "4px 10px",
+              fontSize: "12px",
+              fontWeight: 700,
+              borderRadius: "8px",
+              background: "#059669",
+              color: "#fff",
+              border: "none",
+              cursor: "pointer",
+            }}
+          >
+            {copiedLink ? "✓ Đã copy link" : "📋 Copy link"}
+          </button>
+        </div>
         <div
           style={{
             display: "flex",

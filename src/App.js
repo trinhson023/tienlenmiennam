@@ -9,9 +9,10 @@ import { SocketIO } from "boardgame.io/multiplayer";
 import { APP_PRODUCTION, WEB_SERVER_URL } from "./config";
 
 const { protocol, hostname, port } = window.location;
+const portSuffix = port ? `:${port}` : "";
 
 let server = APP_PRODUCTION
-  ? `${protocol}//${hostname}:${port}`
+  ? `${protocol}//${hostname}${portSuffix}`
   : WEB_SERVER_URL;
 
 const App = Client({

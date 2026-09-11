@@ -11,3 +11,4 @@ services:
       - PORT=8000
       - NODE_ENV=production
       - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
+      - HOST_IP=${HOST_IP:-192.168.2.217}

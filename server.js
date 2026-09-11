@@ -85,6 +85,15 @@ async function searchYouTube(query) {
 }
 
 server.app.use(async (ctx, next) => {
+  if (ctx.method === "GET" && ctx.path === "/api/server-info") {
+    ctx.body = {
+      success: true,
+      port: PORT,
+      hostIp: process.env.HOST_IP || null,
+    };
+    return;
+  }
+
   if (ctx.method === "GET" && ctx.path === "/api/youtube/search") {
     const query = String(ctx.query.q || "").trim();
     if (!query) {
