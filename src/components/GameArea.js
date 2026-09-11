@@ -9,10 +9,11 @@ const _ = require("lodash");
 export default class GameArea extends Component {
   render() {
     const playerID = this.props.playerID;
-    const pID = playerID ? parseInt(playerID) : 0;
-    const numPlayers = this.props.ctx.numPlayers || Object.keys(this.props.G.players).length || 4;
+    const pID = playerID ? parseInt(playerID, 10) : 0;
+    const numPlayers =
+      this.props.ctx.numPlayers || Object.keys(this.props.G.players).length || 4;
 
-    const renderPlayerBox = (idx) => {
+    const renderPlayerBox = (idx, seat) => {
       const idxStr = idx.toString();
       const player = _.find(this.props.gameMetadata, { id: idx });
       const playerName = player ? player.name : `Người chơi ${idx + 1}`;
@@ -24,30 +25,47 @@ export default class GameArea extends Component {
           : null;
 
       return (
-        <PlayerStatus
-          key={idxStr}
-          playerName={playerName}
-          cardsLeft={this.props.G.cardsLeft[idx]}
-          className={statusClass}
-          winner={winner}
-          emote={emote}
-        />
+        <div className={`premium-seat premium-seat--${seat}`} key={idxStr}>
+          <PlayerStatus
+            playerName={playerName}
+            cardsLeft={this.props.G.cardsLeft[idx]}
+            className={statusClass}
+            winner={winner}
+            emote={emote}
+          />
+          <div className="premium-seat__cards" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+        </div>
       );
     };
 
     const center = this.props.ctx.gameover ? (
-      <div key="center" className="round-type">
-        🏆 Ván Đấu Kết Thúc!
+      <div className="premium-center-state premium-center-state--gameover">
+        <span className="premium-center-state__icon">🏆</span>
+        <strong>Ván đấu kết thúc</strong>
+        <span>Kết quả đang được tổng hợp</span>
       </div>
     ) : (
-      <div key="center" className="round-type">
-        {this.props.G.roundType}
+      <div className="premium-center-stack">
+        <div className="premium-center-label">
+          <span>BÀN ĐẤU</span>
+          <strong>{this.props.G.roundType || "any"}</strong>
+        </div>
         <CardArea
-          className="center"
+          className="center premium-center-cards"
           listName="center"
           cards={this.props.G.center}
           disabled={true}
         />
+        {(!this.props.G.center || this.props.G.center.length === 0) && (
+          <div className="premium-center-empty">
+            <span className="premium-center-empty__mark">♠</span>
+            <span>Chờ nước bài đầu tiên</span>
+          </div>
+        )}
       </div>
     );
 
@@ -67,25 +85,12 @@ export default class GameArea extends Component {
     }
 
     return (
-      <div className="game-area">
-        {topPlayer !== null && (
-          <div className="center-container" style={{ marginBottom: "0.5em" }}>
-            {renderPlayerBox(topPlayer)}
-          </div>
-        )}
-        <div className="center-row">
-          {leftPlayer !== null ? (
-            <div>{renderPlayerBox(leftPlayer)}</div>
-          ) : (
-            <div style={{ width: "5em" }}></div>
-          )}
-          {center}
-          {rightPlayer !== null ? (
-            <div>{renderPlayerBox(rightPlayer)}</div>
-          ) : (
-            <div style={{ width: "5em" }}></div>
-          )}
-        </div>
+      <div className="game-area premium-game-area">
+        <div className="premium-table-glow" aria-hidden="true" />
+        {topPlayer !== null && renderPlayerBox(topPlayer, "top")}
+        {leftPlayer !== null && renderPlayerBox(leftPlayer, "left")}
+        {rightPlayer !== null && renderPlayerBox(rightPlayer, "right")}
+        <div className="premium-center-zone">{center}</div>
       </div>
     );
   }
