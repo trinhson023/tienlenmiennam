@@ -11,6 +11,9 @@
 # production
 /build
 
+# persisted local boardgame.io data
+/data/
+
 # local environment / secrets
 .env
 .env.local
