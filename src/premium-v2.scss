@@ -319,7 +319,8 @@ body {
   position: absolute;
   left: 50%;
   top: 52%;
-  width: min(55%, 560px);
+  width: 55%;
+  max-width: 560px;
   transform: translate(-50%, -50%);
   z-index: 3;
 }
