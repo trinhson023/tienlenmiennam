@@ -23,6 +23,18 @@ export default class PlayerArea extends Component {
     const hasBots =
       this.props.gameMetadata &&
       this.props.gameMetadata.some(p => p.name && p.name.includes("Bot"));
+    const numPlayers =
+      this.props.ctx.numPlayers ||
+      (this.props.gameMetadata && this.props.gameMetadata.length) ||
+      Object.keys(this.props.G.players || {}).length ||
+      2;
+    const replayQuery = hasBots
+      ? numPlayers >= 4
+        ? "quick4=true"
+        : "quick2=true"
+      : numPlayers >= 4
+      ? "human4=true"
+      : "";
 
     return (
       <div className="gameover-container">
@@ -48,32 +60,25 @@ export default class PlayerArea extends Component {
           })}
         </div>
         <div className="premium-gameover-actions">
-          {hasBots ? (
-            <button
-              className="play-active"
-              onClick={() => {
-                window.location.href = "/?quick4=true";
-              }}
-            >
-              🔥 Chơi Tiếp Ván Mới (vs 3 Bot AI)
-            </button>
-          ) : (
-            <button
-              className="play-active"
-              onClick={() => {
-                window.location.href = "/?human4=true";
-              }}
-            >
-              🌟 Tạo Bàn Mới Cho 4 Người
-            </button>
-          )}
           <button
             className="play-active"
+            onClick={() => {
+              window.location.href = replayQuery ? `/?${replayQuery}` : "/";
+            }}
+          >
+            {hasBots
+              ? numPlayers >= 4
+                ? "🔥 Đánh Lại (vs 3 Bot AI)"
+                : "🔥 Đánh Lại (vs Bot AI)"
+              : "🌟 Tạo Bàn Mới Cùng Nhóm"}
+          </button>
+          <button
+            className="play-active premium-secondary-action"
             onClick={() => {
               window.location.href = "/";
             }}
           >
-            🔄 Trở Về Sảnh
+            ↩ Trở Về Sảnh
           </button>
         </div>
       </div>
