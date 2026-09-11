@@ -1,5 +1,7 @@
 // server.js
 
+import "dotenv/config";
+import https from "https";
 import { Server } from "boardgame.io/server";
 import serve from "koa-static";
 import path from "path";
@@ -16,8 +18,96 @@ import {
 const PORT = process.env.PORT || 8000;
 const server = Server({ games: [TienLen] });
 
-// API endpoint để mời 1 Bot AI vào bàn
+function getJson(url) {
+  return new Promise((resolve, reject) => {
+    https
+      .get(url, response => {
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", chunk => {
+          body += chunk;
+        });
+        response.on("end", () => {
+          try {
+            const parsed = JSON.parse(body);
+            if (response.statusCode >= 400) {
+              const message =
+                parsed && parsed.error && parsed.error.message
+                  ? parsed.error.message
+                  : `YouTube API HTTP ${response.statusCode}`;
+              reject(new Error(message));
+              return;
+            }
+            resolve(parsed);
+          } catch (err) {
+            reject(err);
+          }
+        });
+      })
+      .on("error", reject);
+  });
+}
+
+async function searchYouTube(query) {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (!apiKey) {
+    throw new Error(
+      "Chưa cấu hình YOUTUBE_API_KEY. Hãy thêm key vào file .env hoặc biến môi trường của server."
+    );
+  }
+
+  const params = new URLSearchParams({
+    part: "snippet",
+    type: "video",
+    maxResults: "8",
+    q: query,
+    videoEmbeddable: "true",
+    videoSyndicated: "true",
+    safeSearch: "moderate",
+    key: apiKey,
+  });
+  const data = await getJson(
+    `https://www.googleapis.com/youtube/v3/search?${params.toString()}`
+  );
+
+  return (data.items || [])
+    .filter(item => item.id && item.id.videoId)
+    .map(item => ({
+      videoId: item.id.videoId,
+      title: item.snippet ? item.snippet.title : "YouTube video",
+      channelTitle: item.snippet ? item.snippet.channelTitle : "",
+      thumbnail:
+        item.snippet && item.snippet.thumbnails
+          ? (item.snippet.thumbnails.medium || item.snippet.thumbnails.default || {})
+              .url || ""
+          : "",
+    }));
+}
+
 server.app.use(async (ctx, next) => {
+  if (ctx.method === "GET" && ctx.path === "/api/youtube/search") {
+    const query = String(ctx.query.q || "").trim();
+    if (!query) {
+      ctx.status = 400;
+      ctx.body = { success: false, error: "Thiếu từ khóa tìm kiếm." };
+      return;
+    }
+    if (query.length > 100) {
+      ctx.status = 400;
+      ctx.body = { success: false, error: "Từ khóa tìm kiếm quá dài." };
+      return;
+    }
+    try {
+      const items = await searchYouTube(query);
+      ctx.body = { success: true, items };
+    } catch (err) {
+      console.error("YouTube search error:", err.message);
+      ctx.status = 500;
+      ctx.body = { success: false, error: err.message };
+    }
+    return;
+  }
+
   if (ctx.method === "POST" && ctx.path.startsWith("/api/bot/join/")) {
     const matchID = ctx.path.replace("/api/bot/join/", "");
     try {
@@ -31,7 +121,6 @@ server.app.use(async (ctx, next) => {
     return;
   }
 
-  // API endpoint để lấp đầy ghế trống bằng Bot AI (mặc định chừa 1 ghế cho người chơi)
   if (ctx.method === "POST" && ctx.path.startsWith("/api/bot/fill/")) {
     const matchID = ctx.path.replace("/api/bot/fill/", "");
     const leaveHumanSeat = ctx.query.leaveHuman !== "false";
@@ -46,7 +135,6 @@ server.app.use(async (ctx, next) => {
     return;
   }
 
-  // API endpoint để xóa bàn (dọn dẹp các phòng trống / xong ván)
   if (ctx.method === "DELETE" && ctx.path.startsWith("/api/rooms/")) {
     const matchID = ctx.path.replace("/api/rooms/", "");
     try {
@@ -63,7 +151,6 @@ server.app.use(async (ctx, next) => {
     return;
   }
 
-  // API endpoint để giải phóng 1 ghế bị kẹt (khi đổi tên hoặc người chơi thoát)
   if (
     ctx.method === "POST" &&
     ctx.path.startsWith("/api/rooms/") &&
@@ -97,7 +184,6 @@ server.app.use(async (ctx, next) => {
   await next();
 });
 
-// Build path relative to the server.js file
 const frontEndAppBuildPath = path.resolve(__dirname, "./build");
 server.app.use(serve(frontEndAppBuildPath));
 
