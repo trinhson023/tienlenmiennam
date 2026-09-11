@@ -4,7 +4,14 @@ import PropTypes from "prop-types";
 import { Draggable } from "react-beautiful-dnd";
 
 const requestImageFile = require.context("../assets/cards", true, /.svg$/);
+
 export default class Card extends PureComponent {
+  handleClick = () => {
+    if (!this.props.disabled && this.props.onCardClick) {
+      this.props.onCardClick(this.props.rank + this.props.suit);
+    }
+  };
+
   render() {
     return (
       <Draggable
@@ -17,7 +24,11 @@ export default class Card extends PureComponent {
             ref={provided.innerRef}
             {...provided.draggableProps}
             {...provided.dragHandleProps}
-            style={getStyle(provided.draggableProps.style, snapshot)}
+            onClick={this.handleClick}
+            style={{
+              ...getStyle(provided.draggableProps.style, snapshot),
+              cursor: this.props.disabled ? "default" : "pointer",
+            }}
           >
             <img
               className="card"
@@ -50,4 +61,5 @@ Card.propTypes = {
   suit: PropTypes.string,
   disabled: PropTypes.bool,
   index: PropTypes.number,
+  onCardClick: PropTypes.func,
 };

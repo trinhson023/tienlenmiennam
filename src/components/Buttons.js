@@ -1,6 +1,7 @@
 import React, { PureComponent } from "react";
 import PropTypes from "prop-types";
 
+import { Combinations } from "../constants";
 import StagingAreaButtons from "./buttons/StagingAreaButtons";
 import PassButton from "./buttons/PassButton";
 import PlayCardsButton from "./buttons/PlayCardsButton";
@@ -30,8 +31,13 @@ export default class Buttons extends PureComponent {
           cardsToCenter={this.props.moves.cardsToCenter}
         />
       );
+    const canPass =
+      this.props.G.roundType !== Combinations.ANY &&
+      this.props.G.center &&
+      this.props.G.center.length > 0;
+
     const passButton =
-      currentPlayer && !tienLen ? (
+      currentPlayer && !tienLen && canPass ? (
         <PassButton passTurn={this.props.moves.passTurn} />
       ) : (
         ""
@@ -44,6 +50,7 @@ export default class Buttons extends PureComponent {
             playerID={this.props.playerID}
             sortStagingArea={this.props.moves.sortStagingArea}
             clearStagingArea={this.props.moves.clearStagingArea}
+            moves={this.props.moves}
           />
         </div>
         <div className="center-container">{playButton}</div>

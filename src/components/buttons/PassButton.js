@@ -2,17 +2,14 @@ import React, { Component } from "react";
 import PropTypes from "prop-types";
 
 export default class PassButton extends Component {
-  shouldComponentUpdate() {
-    return false;
-  }
   render() {
     return (
       <button
-        className="button"
+        className="pass-btn"
         key="passTurn"
         onClick={() => this.props.passTurn()}
       >
-        Pass Turn
+        Bỏ Lượt (Pass)
       </button>
     );
   }

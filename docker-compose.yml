@@ -1,0 +1,12 @@
+services:
+  tien-len:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tien-len-game
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - NODE_ENV=production

@@ -1,10 +1,16 @@
-// src/Card.js
+// src/CardArea.js
 import React from "react";
 import Card from "./Card";
 import { Droppable } from "react-beautiful-dnd";
 import PropTypes from "prop-types";
 
-export default function CardArea({ cards, className, listName, disabled }) {
+export default function CardArea({
+  cards,
+  className,
+  listName,
+  disabled,
+  onCardClick,
+}) {
   return (
     <Droppable
       droppableId={listName}
@@ -27,6 +33,7 @@ export default function CardArea({ cards, className, listName, disabled }) {
                 key={card.rank + card.suit}
                 index={index}
                 disabled={disabled}
+                onCardClick={onCardClick}
               />
             );
           })}
@@ -40,7 +47,7 @@ export default function CardArea({ cards, className, listName, disabled }) {
 CardArea.propTypes = {
   cards: PropTypes.array,
   className: PropTypes.string,
-  setList: PropTypes.func,
   disabled: PropTypes.bool,
   listName: PropTypes.string,
+  onCardClick: PropTypes.func,
 };

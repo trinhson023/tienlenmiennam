@@ -11,31 +11,49 @@ export default function PlayCardsButton({
   center,
   cardsToCenter,
 }) {
+  if (playerID !== currentPlayer) {
+    return (
+      <button className="wait" disabled={true} key="playcards">
+        ⏳ Chưa tới lượt bạn
+      </button>
+    );
+  }
+
   let stagingArea = player.stagingArea;
   let threeSpadesInHand = _.find(player.hand, {
     rank: "3",
     suit: "S",
   });
-  const p = validPlay(stagingArea, roundType, center, threeSpadesInHand);
-  if (typeof p === "string") {
+
+  if (stagingArea.length === 0) {
     return (
       <button className="disabled" disabled={true} key="playcards">
-        {p}
-      </button>
-    );
-  } else if (playerID !== currentPlayer) {
-    return (
-      <button className="wait" key="playcards">
-        Not Your Turn
-      </button>
-    );
-  } else {
-    return (
-      <button key="playcards" onClick={() => cardsToCenter()}>
-        {stagingArea.length === 1 ? "Play Card" : "Play Cards"}
+        {threeSpadesInHand ? "Chọn bài (Bắt buộc có 3♠)" : "Kéo bài lên ô giữa để đánh"}
       </button>
     );
   }
+
+  const p = validPlay(stagingArea, roundType, center, threeSpadesInHand);
+
+  if (typeof p === "string") {
+    let message = p;
+    if (p === "Invalid Combination") message = "Bộ bài không hợp lệ";
+    else if (p === "First Play Must Include 3♠") message = "Nước đầu phải có 3♠";
+    else if (p === "Does Not Match Center") message = "Không cùng loại bài trên bàn";
+    else if (p === "Does Not Beat Center") message = "Bài nhỏ hơn bài trên bàn";
+
+    return (
+      <button className="disabled" disabled={true} key="playcards">
+        {message}
+      </button>
+    );
+  }
+
+  return (
+    <button className="play-active" key="playcards" onClick={() => cardsToCenter()}>
+      {stagingArea.length === 1 ? "Đánh 1 Lá" : `Đánh (${stagingArea.length} Lá)`}
+    </button>
+  );
 }
 
 PlayCardsButton.propTypes = {

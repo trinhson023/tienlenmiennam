@@ -107,24 +107,43 @@ export function validCombination(cards) {
 }
 
 export function validChop(center, cards) {
-  // can only chop combinations that are just 2's and have max 2 cards
-  const combo = validCombination(cards);
-  if (center.length > 2 || center.some(card => card.rank !== "2")) {
+  if (!center || center.length === 0 || !cards || cards.length === 0) {
     return false;
   }
-  // can only chop pair of twos with four pair
-  else if (center.length === 2 && combo === Combinations.FOURPAIR) {
-    return true;
-  } else if (
-    center.length === 1 &&
-    [
+  const combo = validCombination(cards);
+  const centerCombo = validCombination(center);
+  const centerAllTwos = center.every(card => card.rank === "2");
+
+  // 1. Chặt 1 con Heo (bằng 3 đôi thông, Tứ Quý, hoặc 4 đôi thông)
+  if (center.length === 1 && center[0].rank === "2") {
+    return [
       Combinations.THREEPAIR,
-      Combinations.FOURPAIR,
       Combinations.FOUROFAKIND,
-    ].some(c => c === combo)
-  ) {
-    return true;
+      Combinations.FOURPAIR,
+    ].includes(combo);
   }
+
+  // 2. Chặt Đôi Heo (Tứ Quý hoặc 4 đôi thông chặt được Đôi Heo)
+  if (center.length === 2 && centerAllTwos) {
+    return [
+      Combinations.FOUROFAKIND,
+      Combinations.FOURPAIR,
+    ].includes(combo);
+  }
+
+  // 3. Chặt đè 3 Đôi Thông (Tứ Quý hoặc 4 đôi thông chặt đè được)
+  if (centerCombo === Combinations.THREEPAIR) {
+    return [
+      Combinations.FOUROFAKIND,
+      Combinations.FOURPAIR,
+    ].includes(combo);
+  }
+
+  // 4. Chặt đè Tứ Quý (4 đôi thông chặt đè được Tứ Quý)
+  if (centerCombo === Combinations.FOUROFAKIND) {
+    return combo === Combinations.FOURPAIR;
+  }
+
   return false;
 }
 
