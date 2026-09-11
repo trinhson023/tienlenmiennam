@@ -4,6 +4,7 @@ import React, { Component } from "react";
 import PropTypes from "prop-types";
 import { DragDropContext } from "react-beautiful-dnd";
 import GameArea from "./components/GameArea";
+import GameHUD from "./components/GameHUD";
 import PlayerArea from "./components/PlayerArea";
 import { validChop } from "./moves/helper-functions/cardComparison";
 import {
@@ -17,7 +18,6 @@ class TienLenBoard extends Component {
   componentDidUpdate(prevProps) {
     if (!this.props.G || !prevProps.G) return;
 
-    // 1. Center card play / chop sound
     const prevCenter = prevProps.G.center || [];
     const currentCenter = this.props.G.center || [];
     if (
@@ -34,7 +34,6 @@ class TienLenBoard extends Component {
       }
     }
 
-    // 2. Victory sound when someone wins or game over
     const prevWinners = (prevProps.G.winners && prevProps.G.winners.length) || 0;
     const currWinners = (this.props.G.winners && this.props.G.winners.length) || 0;
     if (
@@ -44,7 +43,6 @@ class TienLenBoard extends Component {
       playVictorySound();
     }
 
-    // 3. Quick Chat emote sound
     const prevEmote = prevProps.G.lastEmote;
     const currEmote = this.props.G.lastEmote;
     if (currEmote && (!prevEmote || currEmote.time !== prevEmote.time)) {
@@ -54,10 +52,13 @@ class TienLenBoard extends Component {
 
   render() {
     return (
-      <div className="game">
+      <div className="game premium-table-shell">
+        <GameHUD {...this.props} />
         <DragDropContext onDragEnd={this.props.moves.relocateCards}>
           <GameArea {...this.props} />
-          <PlayerArea {...this.props} />
+          <div className="premium-player-dock">
+            <PlayerArea {...this.props} />
+          </div>
         </DragDropContext>
       </div>
     );
