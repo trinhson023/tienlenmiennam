@@ -13,6 +13,21 @@ export default class GameArea extends Component {
     const numPlayers =
       this.props.ctx.numPlayers || Object.keys(this.props.G.players).length || 4;
 
+    const seatForPlayer = idx => {
+      if (idx === pID) return "self";
+      if (numPlayers === 4) {
+        if (idx === (pID + 2) % 4) return "top";
+        if (idx === (pID + 3) % 4) return "left";
+        if (idx === (pID + 1) % 4) return "right";
+      } else if (numPlayers === 3) {
+        if (idx === (pID + 1) % 3) return "left";
+        if (idx === (pID + 2) % 3) return "right";
+      } else if (numPlayers === 2) {
+        return "top";
+      }
+      return "top";
+    };
+
     const renderPlayerBox = (idx, seat) => {
       const idxStr = idx.toString();
       const player = _.find(this.props.gameMetadata, { id: idx });
@@ -84,13 +99,23 @@ export default class GameArea extends Component {
       topPlayer = (pID + 1) % 2;
     }
 
+    const lastPlayBy =
+      this.props.G.lastPlayBy === null || this.props.G.lastPlayBy === undefined
+        ? pID
+        : parseInt(this.props.G.lastPlayBy, 10);
+    const originSeat = seatForPlayer(lastPlayBy);
+
     return (
       <div className="game-area premium-game-area">
         <div className="premium-table-glow" aria-hidden="true" />
         {topPlayer !== null && renderPlayerBox(topPlayer, "top")}
         {leftPlayer !== null && renderPlayerBox(leftPlayer, "left")}
         {rightPlayer !== null && renderPlayerBox(rightPlayer, "right")}
-        <div className="premium-center-zone">{center}</div>
+        <div
+          className={`premium-center-zone premium-center-zone--from-${originSeat}`}
+        >
+          {center}
+        </div>
       </div>
     );
   }
