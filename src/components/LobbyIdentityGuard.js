@@ -17,6 +17,14 @@ function readLobbyCookie() {
   }
 }
 
+function isNameEntryPhase(phase) {
+  if (!phase) return false;
+  const title = phase.querySelector(".phase-title");
+  return Boolean(
+    title && title.textContent.trim().toLowerCase() === "choose a player name:"
+  );
+}
+
 async function releasePreviousSeat(nextName) {
   const lobbyState = readLobbyCookie();
   if (!lobbyState) return;
@@ -36,6 +44,12 @@ async function releasePreviousSeat(nextName) {
   const credentialStore = lobbyState.credentialStore || {};
   const credentials = credentialStore[oldName];
 
+  // Never force-release a seat without the credential owned by this browser.
+  // The manual "Hủy" control in the room manager remains the recovery path for
+  // genuinely orphaned seats. This avoids deleting an active seat just because
+  // another text field (for example YouTube search) fired Enter.
+  if (!credentials) return;
+
   try {
     const roomsResponse = await fetch("/games/tien-len");
     if (!roomsResponse.ok) return;
@@ -51,50 +65,32 @@ async function releasePreviousSeat(nextName) {
       });
     });
 
-    if (candidates.length === 0) return;
-
-    // boardgame.io 0.39.16 stores credentials per player name in lobbyState.
-    // Use the official /leave endpoint first so we only release the seat that
-    // belongs to this browser/session.
-    if (credentials) {
-      for (const candidate of candidates) {
-        try {
-          const leaveResponse = await fetch(
-            `/games/tien-len/${candidate.room.gameID}/leave`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                playerID: candidate.player.id,
-                credentials,
-              }),
-            }
-          );
-
-          if (leaveResponse.ok) {
-            console.info(
-              `[Lobby] Released old seat ${oldName} before changing name to ${cleanNextName}.`
-            );
-            return;
+    for (const candidate of candidates) {
+      try {
+        const leaveResponse = await fetch(
+          `/games/tien-len/${candidate.room.gameID}/leave`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              playerID: candidate.player.id,
+              credentials,
+            }),
           }
-        } catch (e) {
-          // Try the next matching room before using the fallback below.
+        );
+
+        if (leaveResponse.ok) {
+          console.info(
+            `[Lobby] Released old seat ${oldName} before changing name to ${cleanNextName}.`
+          );
+          return;
         }
+      } catch (e) {
+        // Try another room containing the same old display name.
       }
     }
-
-    // Fallback for an already-orphaned seat whose credential cookie is missing.
-    // Only do this when the old name appears exactly once, avoiding accidental
-    // removal when two different people happen to use the same display name.
-    if (candidates.length === 1) {
-      const candidate = candidates[0];
-      await fetch(
-        `/api/rooms/${candidate.room.gameID}/free-seat/${candidate.player.id}`,
-        { method: "POST" }
-      );
-    }
   } catch (e) {
-    // Name entry should never be blocked just because stale-seat cleanup failed.
+    // Name entry should never be blocked because cleanup failed.
   }
 }
 
@@ -102,15 +98,17 @@ export default function LobbyIdentityGuard() {
   const lastAttemptRef = useRef({ key: "", at: 0 });
 
   useEffect(() => {
-    const triggerCleanup = input => {
-      if (!input) return;
+    const triggerCleanup = (phase, input) => {
+      if (!isNameEntryPhase(phase) || !input) return;
+
       const nextName = String(input.value || "").trim();
       if (!nextName) return;
 
       const lobbyState = readLobbyCookie();
-      const oldName = lobbyState && lobbyState.playerName
-        ? String(lobbyState.playerName).trim()
-        : "";
+      const oldName =
+        lobbyState && lobbyState.playerName
+          ? String(lobbyState.playerName).trim()
+          : "";
       const key = `${oldName}->${nextName}`;
       const now = Date.now();
 
@@ -126,23 +124,26 @@ export default function LobbyIdentityGuard() {
     };
 
     const onClickCapture = event => {
-      const button = event.target && event.target.closest
-        ? event.target.closest("button")
-        : null;
+      const button =
+        event.target && event.target.closest
+          ? event.target.closest("button")
+          : null;
       if (!button || button.textContent.trim() !== "Enter") return;
 
-      const lobby = button.closest("#lobby-view");
-      if (!lobby) return;
-      const input = lobby.querySelector('.phase input[type="text"]');
-      triggerCleanup(input);
+      const phase = button.closest("#lobby-view .phase");
+      if (!isNameEntryPhase(phase)) return;
+      const input = phase.querySelector('input[type="text"]');
+      triggerCleanup(phase, input);
     };
 
     const onKeyDownCapture = event => {
       if (event.key !== "Enter") return;
       const input = event.target;
       if (!input || input.tagName !== "INPUT" || input.type !== "text") return;
-      if (!input.closest("#lobby-view .phase")) return;
-      triggerCleanup(input);
+
+      const phase = input.closest("#lobby-view .phase");
+      if (!isNameEntryPhase(phase)) return;
+      triggerCleanup(phase, input);
     };
 
     document.addEventListener("click", onClickCapture, true);
