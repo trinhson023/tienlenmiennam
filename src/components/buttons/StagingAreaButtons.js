@@ -3,33 +3,42 @@ import PropTypes from "prop-types";
 
 export default class StagingAreaButtons extends Component {
   render() {
-    const className =
-      this.props.currentPlayer === this.props.playerID
-        ? "button current-staging-area-btn"
-        : "button staging-area-btn";
+    const active = this.props.currentPlayer === this.props.playerID;
+    const className = active
+      ? "table-tool table-tool--active"
+      : "table-tool";
+
     return (
-      <div className="center-container" style={{ flexWrap: "wrap" }}>
+      <div className="table-tools" aria-label="Công cụ xếp bài">
         <button
           className={className}
           key="clearStagingArea"
           onClick={() => this.props.clearStagingArea()}
+          title="Bỏ toàn bộ bài đang chọn về tay"
         >
-          Hạ bài xuống (Clear)
+          <span className="table-tool__icon">↩</span>
+          <span>Bỏ chọn</span>
         </button>
+
         <button
           className={className}
           key="sortStagingArea"
           onClick={() => this.props.sortStagingArea()}
+          title="Sắp xếp các lá đang chọn"
         >
-          Xếp ô chọn
+          <span className="table-tool__icon">⇅</span>
+          <span>Xếp bài chọn</span>
         </button>
+
         {this.props.moves && this.props.moves.sortHand && (
           <button
             className={className}
             key="sortHand"
             onClick={() => this.props.moves.sortHand()}
+            title="Sắp xếp lại bài trên tay"
           >
-            Sắp xếp bài trên tay
+            <span className="table-tool__icon">♠</span>
+            <span>Xếp tay</span>
           </button>
         )}
       </div>
