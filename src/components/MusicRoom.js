@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import PropTypes from "prop-types";
 
 function extractVideoId(input) {
@@ -26,6 +26,24 @@ function formatSeconds(value) {
   return `${m}:${s}`;
 }
 
+function storedNumber(key, fallback) {
+  try {
+    const value = window.localStorage.getItem(key);
+    return value === null ? fallback : Number(value);
+  } catch (e) {
+    return fallback;
+  }
+}
+
+function storedBoolean(key, fallback) {
+  try {
+    const value = window.sessionStorage.getItem(key);
+    return value === null ? fallback : value === "1";
+  } catch (e) {
+    return fallback;
+  }
+}
+
 export default function MusicRoom({ G, playerID, moves }) {
   const room = G.musicRoom || {
     current: null,
@@ -36,35 +54,55 @@ export default function MusicRoom({ G, playerID, moves }) {
     revision: 0,
   };
   const isHost = String(playerID) === "0";
+  const currentVideoId = room.current && room.current.videoId
+    ? room.current.videoId
+    : null;
+
   const [open, setOpen] = useState(false);
-  const [unlocked, setUnlocked] = useState(false);
+  const [unlocked, setUnlocked] = useState(() =>
+    storedBoolean("tienlen.music.unlocked", false)
+  );
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
-  const [volume, setVolume] = useState(55);
+  const [volume, setVolume] = useState(() =>
+    Math.max(0, Math.min(100, storedNumber("tienlen.music.volume", 55)))
+  );
   const [muted, setMuted] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
   const [playerError, setPlayerError] = useState("");
   const [localPosition, setLocalPosition] = useState(0);
+
   const playerRef = useRef(null);
   const playerNodeRef = useRef(null);
   const syncTimerRef = useRef(null);
   const duckTimerRef = useRef(null);
+  const lastLoadedVideoRef = useRef(null);
 
-  const expectedPosition = useMemo(() => {
-    if (!room.current) return 0;
+  const expectedPositionNow = () => {
+    if (!currentVideoId) return 0;
     if (room.playing && room.startedAt) {
-      return Math.max(0, (Date.now() - room.startedAt) / 1000);
+      return Math.max(0, (Date.now() - Number(room.startedAt)) / 1000);
     }
     return Math.max(0, Number(room.position) || 0);
-  }, [room.current, room.playing, room.position, room.startedAt, room.revision]);
+  };
+
+  const rememberUnlocked = value => {
+    setUnlocked(value);
+    try {
+      window.sessionStorage.setItem("tienlen.music.unlocked", value ? "1" : "0");
+    } catch (e) {
+      return;
+    }
+  };
 
   useEffect(() => {
     if (window.YT && window.YT.Player) {
       setPlayerReady(true);
-      return;
+      return undefined;
     }
+
     const existing = document.getElementById("youtube-iframe-api");
     if (!existing) {
       const tag = document.createElement("script");
@@ -72,22 +110,26 @@ export default function MusicRoom({ G, playerID, moves }) {
       tag.src = "https://www.youtube.com/iframe_api";
       document.body.appendChild(tag);
     }
+
     const previous = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => {
       if (typeof previous === "function") previous();
       setPlayerReady(true);
     };
+
     const timer = setInterval(() => {
       if (window.YT && window.YT.Player) {
         clearInterval(timer);
         setPlayerReady(true);
       }
     }, 250);
+
     return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    if (!playerReady || !playerNodeRef.current || playerRef.current) return;
+    if (!playerReady || !playerNodeRef.current || playerRef.current) return undefined;
+
     playerRef.current = new window.YT.Player(playerNodeRef.current, {
       width: "320",
       height: "200",
@@ -101,53 +143,87 @@ export default function MusicRoom({ G, playerID, moves }) {
           event.target.setVolume(volume);
           if (muted) event.target.mute();
         },
-        onError: () => setPlayerError("Video này không phát được trong trình nhúng."),
+        onError: () =>
+          setPlayerError("Video này không phát được trong trình nhúng."),
         onAutoplayBlocked: () => {
-          setUnlocked(false);
-          setPlayerError("Trình duyệt đã chặn autoplay. Bấm “Bật nhạc bàn” một lần.");
+          rememberUnlocked(false);
+          setPlayerError(
+            "Trình duyệt đã chặn autoplay. Bấm “Bật nhạc bàn” một lần."
+          );
         },
       },
     });
+
     return () => {
       if (playerRef.current && playerRef.current.destroy) {
-        playerRef.current.destroy();
+        try {
+          playerRef.current.destroy();
+        } catch (e) {
+          // no-op
+        }
       }
       playerRef.current = null;
+      lastLoadedVideoRef.current = null;
     };
   }, [playerReady]);
 
+  /*
+   * IMPORTANT: this effect only depends on primitive MUSIC playback state.
+   * boardgame.io recreates G objects after normal card moves; depending on room/current
+   * object identity caused the old player sync effect to run again during gameplay and
+   * could reload/seek the YouTube iframe. Card moves must not touch playback.
+   */
   useEffect(() => {
     const player = playerRef.current;
-    if (!player || !room.current || !room.current.videoId || !unlocked) return;
+    if (!player || !currentVideoId || !unlocked) return;
+
     setPlayerError("");
+    const target = expectedPositionNow();
+
     try {
-      const videoData = player.getVideoData ? player.getVideoData() : {};
-      const currentId = videoData ? videoData.video_id : null;
-      if (currentId !== room.current.videoId) {
-        player.loadVideoById({
-          videoId: room.current.videoId,
-          startSeconds: expectedPosition,
-        });
-        if (!room.playing) player.pauseVideo();
-      } else {
-        const pos = player.getCurrentTime ? player.getCurrentTime() : 0;
-        if (Math.abs(pos - expectedPosition) > 2.5 && player.seekTo) {
-          player.seekTo(expectedPosition, true);
+      if (lastLoadedVideoRef.current !== currentVideoId) {
+        if (room.playing && player.loadVideoById) {
+          player.loadVideoById({
+            videoId: currentVideoId,
+            startSeconds: target,
+          });
+        } else if (player.cueVideoById) {
+          player.cueVideoById({
+            videoId: currentVideoId,
+            startSeconds: target,
+          });
         }
-        if (room.playing && player.playVideo) player.playVideo();
-        if (!room.playing && player.pauseVideo) player.pauseVideo();
+        lastLoadedVideoRef.current = currentVideoId;
+        return;
       }
+
+      const pos = player.getCurrentTime ? player.getCurrentTime() : target;
+      if (Math.abs(pos - target) > 3.5 && player.seekTo) {
+        player.seekTo(target, true);
+      }
+
+      if (room.playing && player.playVideo) player.playVideo();
+      if (!room.playing && player.pauseVideo) player.pauseVideo();
     } catch (e) {
       setPlayerError("Không thể đồng bộ player.");
     }
-  }, [room.current, room.playing, room.revision, expectedPosition, unlocked]);
+  }, [
+    playerReady,
+    unlocked,
+    currentVideoId,
+    room.playing,
+    room.position,
+    room.startedAt,
+  ]);
 
   useEffect(() => {
     const player = playerRef.current;
     if (!player) return;
     try {
       player.setVolume(volume);
-      muted ? player.mute() : player.unMute();
+      if (muted) player.mute();
+      else player.unMute();
+      window.localStorage.setItem("tienlen.music.volume", String(volume));
     } catch (e) {
       return;
     }
@@ -175,6 +251,7 @@ export default function MusicRoom({ G, playerID, moves }) {
         return;
       }
     };
+
     window.addEventListener("tienlen:duck-music", handleDuck);
     return () => {
       window.removeEventListener("tienlen:duck-music", handleDuck);
@@ -189,26 +266,30 @@ export default function MusicRoom({ G, playerID, moves }) {
       if (player && player.getCurrentTime && unlocked) {
         try {
           setLocalPosition(player.getCurrentTime());
+          return;
         } catch (e) {
-          setLocalPosition(expectedPosition);
+          // fall through
         }
-      } else {
-        setLocalPosition(expectedPosition);
       }
+      setLocalPosition(expectedPositionNow());
     }, 1000);
+
     return () => clearInterval(syncTimerRef.current);
-  }, [expectedPosition, unlocked]);
+  }, [unlocked, currentVideoId, room.playing, room.position, room.startedAt]);
 
   const enableAudio = () => {
-    setUnlocked(true);
+    rememberUnlocked(true);
     setPlayerError("");
     const player = playerRef.current;
-    if (!player || !room.current) return;
+    if (!player || !currentVideoId) return;
+
     try {
+      const target = expectedPositionNow();
       player.loadVideoById({
-        videoId: room.current.videoId,
-        startSeconds: expectedPosition,
+        videoId: currentVideoId,
+        startSeconds: target,
       });
+      lastLoadedVideoRef.current = currentVideoId;
       player.setVolume(volume);
       if (muted) player.mute();
       if (!room.playing) player.pauseVideo();
@@ -220,15 +301,17 @@ export default function MusicRoom({ G, playerID, moves }) {
   const search = async () => {
     const value = query.trim();
     if (!value || !isHost) return;
+
     const pastedId = extractVideoId(value);
     if (pastedId) {
+      rememberUnlocked(true);
       moves.musicSelect &&
         moves.musicSelect({ videoId: pastedId, title: "YouTube video" });
       setResults([]);
       setQuery("");
-      setUnlocked(true);
       return;
     }
+
     setSearching(true);
     setSearchError("");
     try {
@@ -246,19 +329,19 @@ export default function MusicRoom({ G, playerID, moves }) {
   };
 
   const playTrack = item => {
-    setUnlocked(true);
+    rememberUnlocked(true);
     moves.musicSelect && moves.musicSelect(item);
   };
 
   const toggleHostPlayback = () => {
     if (!isHost || !room.current) return;
-    setUnlocked(true);
+    rememberUnlocked(true);
     const player = playerRef.current;
-    let pos = expectedPosition;
+    let pos = expectedPositionNow();
     try {
       if (player && player.getCurrentTime) pos = player.getCurrentTime();
     } catch (e) {
-      pos = expectedPosition;
+      pos = expectedPositionNow();
     }
     moves.musicToggle && moves.musicToggle(!room.playing, pos);
   };
@@ -269,15 +352,15 @@ export default function MusicRoom({ G, playerID, moves }) {
     moves.musicSeek && moves.musicSeek(position);
   };
 
-  const duration = (() => {
-    try {
-      return playerRef.current && playerRef.current.getDuration
+  let duration = 0;
+  try {
+    duration =
+      playerRef.current && playerRef.current.getDuration
         ? playerRef.current.getDuration()
         : 0;
-    } catch (e) {
-      return 0;
-    }
-  })();
+  } catch (e) {
+    duration = 0;
+  }
 
   return (
     <div className={`music-room ${open ? "music-room--open" : ""}`}>
