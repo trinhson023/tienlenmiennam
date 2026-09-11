@@ -37,6 +37,7 @@ export default function MusicRoom({ G, playerID, moves }) {
   };
   const isHost = String(playerID) === "0";
   const [open, setOpen] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -49,6 +50,7 @@ export default function MusicRoom({ G, playerID, moves }) {
   const playerRef = useRef(null);
   const playerNodeRef = useRef(null);
   const syncTimerRef = useRef(null);
+  const duckTimerRef = useRef(null);
 
   const expectedPosition = useMemo(() => {
     if (!room.current) return 0;
@@ -88,7 +90,7 @@ export default function MusicRoom({ G, playerID, moves }) {
     if (!playerReady || !playerNodeRef.current || playerRef.current) return;
     playerRef.current = new window.YT.Player(playerNodeRef.current, {
       width: "320",
-      height: "180",
+      height: "200",
       playerVars: {
         playsinline: 1,
         rel: 0,
@@ -100,6 +102,10 @@ export default function MusicRoom({ G, playerID, moves }) {
           if (muted) event.target.mute();
         },
         onError: () => setPlayerError("Video này không phát được trong trình nhúng."),
+        onAutoplayBlocked: () => {
+          setUnlocked(false);
+          setPlayerError("Trình duyệt đã chặn autoplay. Bấm “Bật nhạc bàn” một lần.");
+        },
       },
     });
     return () => {
@@ -112,10 +118,11 @@ export default function MusicRoom({ G, playerID, moves }) {
 
   useEffect(() => {
     const player = playerRef.current;
-    if (!player || !room.current || !room.current.videoId) return;
+    if (!player || !room.current || !room.current.videoId || !unlocked) return;
     setPlayerError("");
     try {
-      const currentId = player.getVideoData && player.getVideoData().video_id;
+      const videoData = player.getVideoData ? player.getVideoData() : {};
+      const currentId = videoData ? videoData.video_id : null;
       if (currentId !== room.current.videoId) {
         player.loadVideoById({
           videoId: room.current.videoId,
@@ -133,7 +140,7 @@ export default function MusicRoom({ G, playerID, moves }) {
     } catch (e) {
       setPlayerError("Không thể đồng bộ player.");
     }
-  }, [room.current, room.playing, room.revision, expectedPosition]);
+  }, [room.current, room.playing, room.revision, expectedPosition, unlocked]);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -147,10 +154,39 @@ export default function MusicRoom({ G, playerID, moves }) {
   }, [volume, muted]);
 
   useEffect(() => {
+    const handleDuck = event => {
+      const player = playerRef.current;
+      if (!player || !unlocked || muted) return;
+      const duration =
+        event && event.detail && event.detail.duration
+          ? Number(event.detail.duration)
+          : 900;
+      try {
+        clearTimeout(duckTimerRef.current);
+        player.setVolume(Math.max(8, Math.round(volume * 0.35)));
+        duckTimerRef.current = setTimeout(() => {
+          try {
+            if (playerRef.current) playerRef.current.setVolume(volume);
+          } catch (e) {
+            return;
+          }
+        }, duration);
+      } catch (e) {
+        return;
+      }
+    };
+    window.addEventListener("tienlen:duck-music", handleDuck);
+    return () => {
+      window.removeEventListener("tienlen:duck-music", handleDuck);
+      clearTimeout(duckTimerRef.current);
+    };
+  }, [volume, muted, unlocked]);
+
+  useEffect(() => {
     clearInterval(syncTimerRef.current);
     syncTimerRef.current = setInterval(() => {
       const player = playerRef.current;
-      if (player && player.getCurrentTime) {
+      if (player && player.getCurrentTime && unlocked) {
         try {
           setLocalPosition(player.getCurrentTime());
         } catch (e) {
@@ -161,16 +197,36 @@ export default function MusicRoom({ G, playerID, moves }) {
       }
     }, 1000);
     return () => clearInterval(syncTimerRef.current);
-  }, [expectedPosition]);
+  }, [expectedPosition, unlocked]);
+
+  const enableAudio = () => {
+    setUnlocked(true);
+    setPlayerError("");
+    const player = playerRef.current;
+    if (!player || !room.current) return;
+    try {
+      player.loadVideoById({
+        videoId: room.current.videoId,
+        startSeconds: expectedPosition,
+      });
+      player.setVolume(volume);
+      if (muted) player.mute();
+      if (!room.playing) player.pauseVideo();
+    } catch (e) {
+      setPlayerError("Không thể bật nhạc. Thử đóng/mở Music Room rồi bấm lại.");
+    }
+  };
 
   const search = async () => {
     const value = query.trim();
     if (!value || !isHost) return;
     const pastedId = extractVideoId(value);
     if (pastedId) {
-      moves.musicSelect && moves.musicSelect({ videoId: pastedId, title: "YouTube video" });
+      moves.musicSelect &&
+        moves.musicSelect({ videoId: pastedId, title: "YouTube video" });
       setResults([]);
       setQuery("");
+      setUnlocked(true);
       return;
     }
     setSearching(true);
@@ -178,7 +234,9 @@ export default function MusicRoom({ G, playerID, moves }) {
     try {
       const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(value)}`);
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "Search failed");
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Search failed");
+      }
       setResults(data.items || []);
     } catch (err) {
       setSearchError(err.message || "Không tìm được nhạc.");
@@ -187,8 +245,14 @@ export default function MusicRoom({ G, playerID, moves }) {
     }
   };
 
+  const playTrack = item => {
+    setUnlocked(true);
+    moves.musicSelect && moves.musicSelect(item);
+  };
+
   const toggleHostPlayback = () => {
     if (!isHost || !room.current) return;
+    setUnlocked(true);
     const player = playerRef.current;
     let pos = expectedPosition;
     try {
@@ -220,127 +284,129 @@ export default function MusicRoom({ G, playerID, moves }) {
       <button className="music-room__toggle" onClick={() => setOpen(!open)}>
         🎵 {room.current ? room.current.title : "Music Room"}
       </button>
-      {open && (
-        <div className="music-room__panel">
-          <div className="music-room__header">
-            <div>
-              <span>TABLE MUSIC</span>
-              <strong>{isHost ? "Bạn là DJ" : "DJ: Chủ bàn"}</strong>
-            </div>
-            <button onClick={() => setOpen(false)}>×</button>
-          </div>
 
-          <div className="music-room__player-wrap">
-            <div className="music-room__player" ref={playerNodeRef} />
-            {!room.current && (
-              <div className="music-room__empty">Chủ bàn chưa chọn nhạc</div>
+      <div className={`music-room__panel ${open ? "" : "music-room__panel--hidden"}`}>
+        <div className="music-room__header">
+          <div>
+            <span>TABLE MUSIC</span>
+            <strong>{isHost ? "Bạn là DJ" : "DJ: Chủ bàn"}</strong>
+          </div>
+          <button onClick={() => setOpen(false)}>×</button>
+        </div>
+
+        <div className="music-room__player-wrap">
+          <div className="music-room__player" ref={playerNodeRef} />
+          {!room.current && (
+            <div className="music-room__empty">Chủ bàn chưa chọn nhạc</div>
+          )}
+          {room.current && !unlocked && (
+            <button className="music-room__unlock" onClick={enableAudio}>
+              🎧 Bật nhạc bàn
+            </button>
+          )}
+        </div>
+
+        {room.current && (
+          <div className="music-room__now">
+            <strong>{room.current.title}</strong>
+            <span>{room.current.channelTitle || "YouTube"}</span>
+          </div>
+        )}
+
+        <div className="music-room__controls">
+          <button onClick={toggleHostPlayback} disabled={!isHost || !room.current}>
+            {room.playing ? "⏸" : "▶"}
+          </button>
+          <button
+            onClick={() => moves.musicNext && moves.musicNext()}
+            disabled={!isHost || !room.current}
+          >
+            ⏭
+          </button>
+          <button onClick={() => setMuted(!muted)}>{muted ? "🔇" : "🔊"}</button>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            value={volume}
+            onChange={e => setVolume(Number(e.target.value))}
+          />
+        </div>
+
+        <div className="music-room__timeline">
+          <span>{formatSeconds(localPosition)}</span>
+          <input
+            type="range"
+            min="0"
+            max={Math.max(1, duration)}
+            value={Math.min(localPosition, Math.max(1, duration))}
+            disabled={!isHost || !room.current || duration <= 0}
+            onChange={e => seekHost(e.target.value)}
+          />
+          <span>{duration > 0 ? formatSeconds(duration) : "--:--"}</span>
+        </div>
+
+        {isHost && (
+          <div className="music-room__search">
+            <div className="music-room__searchbar">
+              <input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter") search();
+                }}
+                placeholder="Tìm YouTube hoặc dán link..."
+              />
+              <button onClick={search} disabled={searching}>
+                {searching ? "..." : "Tìm"}
+              </button>
+            </div>
+            {searchError && <div className="music-room__error">{searchError}</div>}
+            <div className="music-room__results">
+              {results.map(item => (
+                <div className="music-room__result" key={item.videoId}>
+                  {item.thumbnail && <img src={item.thumbnail} alt="" />}
+                  <div>
+                    <strong>{item.title}</strong>
+                    <span>{item.channelTitle}</span>
+                  </div>
+                  <div className="music-room__result-actions">
+                    <button onClick={() => playTrack(item)}>▶</button>
+                    <button onClick={() => moves.musicQueue && moves.musicQueue(item)}>
+                      +
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="music-room__queue">
+          <div className="music-room__queue-title">
+            <strong>Queue ({room.queue.length})</strong>
+            {isHost && room.queue.length > 0 && (
+              <button onClick={() => moves.musicClearQueue && moves.musicClearQueue()}>
+                Xóa queue
+              </button>
             )}
           </div>
-
-          {room.current && (
-            <div className="music-room__now">
-              <strong>{room.current.title}</strong>
-              <span>{room.current.channelTitle || "YouTube"}</span>
-            </div>
-          )}
-
-          <div className="music-room__controls">
-            <button onClick={toggleHostPlayback} disabled={!isHost || !room.current}>
-              {room.playing ? "⏸" : "▶"}
-            </button>
-            <button
-              onClick={() => moves.musicNext && moves.musicNext()}
-              disabled={!isHost || !room.current}
-            >
-              ⏭
-            </button>
-            <button onClick={() => setMuted(!muted)}>{muted ? "🔇" : "🔊"}</button>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={volume}
-              onChange={e => setVolume(Number(e.target.value))}
-            />
-          </div>
-
-          <div className="music-room__timeline">
-            <span>{formatSeconds(localPosition)}</span>
-            <input
-              type="range"
-              min="0"
-              max={Math.max(1, duration)}
-              value={Math.min(localPosition, Math.max(1, duration))}
-              disabled={!isHost || !room.current || duration <= 0}
-              onChange={e => seekHost(e.target.value)}
-            />
-            <span>{duration > 0 ? formatSeconds(duration) : "--:--"}</span>
-          </div>
-
-          {isHost && (
-            <div className="music-room__search">
-              <div className="music-room__searchbar">
-                <input
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === "Enter") search();
-                  }}
-                  placeholder="Tìm YouTube hoặc dán link..."
-                />
-                <button onClick={search} disabled={searching}>
-                  {searching ? "..." : "Tìm"}
-                </button>
-              </div>
-              {searchError && <div className="music-room__error">{searchError}</div>}
-              <div className="music-room__results">
-                {results.map(item => (
-                  <div className="music-room__result" key={item.videoId}>
-                    {item.thumbnail && <img src={item.thumbnail} alt="" />}
-                    <div>
-                      <strong>{item.title}</strong>
-                      <span>{item.channelTitle}</span>
-                    </div>
-                    <div className="music-room__result-actions">
-                      <button onClick={() => moves.musicSelect && moves.musicSelect(item)}>
-                        ▶
-                      </button>
-                      <button onClick={() => moves.musicQueue && moves.musicQueue(item)}>
-                        +
-                      </button>
-                    </div>
-                  </div>
-                ))}
+          {room.queue.slice(0, 5).map((item, index) => (
+            <div className="music-room__queue-item" key={`${item.videoId}-${index}`}>
+              <span>{index + 1}</span>
+              <div>
+                <strong>{item.title}</strong>
+                <small>{item.channelTitle}</small>
               </div>
             </div>
-          )}
-
-          <div className="music-room__queue">
-            <div className="music-room__queue-title">
-              <strong>Queue ({room.queue.length})</strong>
-              {isHost && room.queue.length > 0 && (
-                <button onClick={() => moves.musicClearQueue && moves.musicClearQueue()}>
-                  Xóa queue
-                </button>
-              )}
-            </div>
-            {room.queue.slice(0, 5).map((item, index) => (
-              <div className="music-room__queue-item" key={`${item.videoId}-${index}`}>
-                <span>{index + 1}</span>
-                <div>
-                  <strong>{item.title}</strong>
-                  <small>{item.channelTitle}</small>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {playerError && <div className="music-room__error">{playerError}</div>}
-          <div className="music-room__hint">
-            Volume là riêng từng máy; Play / Pause / Next / Seek do chủ bàn điều khiển.
-          </div>
+          ))}
         </div>
-      )}
+
+        {playerError && <div className="music-room__error">{playerError}</div>}
+        <div className="music-room__hint">
+          Volume là riêng từng máy; Play / Pause / Next / Seek do chủ bàn điều khiển.
+        </div>
+      </div>
     </div>
   );
 }
