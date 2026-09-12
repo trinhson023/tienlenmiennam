@@ -3,6 +3,7 @@
 import "dotenv/config";
 import https from "https";
 import { Server } from "boardgame.io/server";
+import { InitializeGame } from "boardgame.io/core";
 import serve from "koa-static";
 import path from "path";
 import { default as TienLen } from "./src/TienLen";
@@ -68,7 +69,7 @@ function getJson(url) {
   });
 }
 
-async function searchYouTube(query) {
+async function searchYouTube(query, options = {}) {
   const apiKey = process.env.YOUTUBE_API_KEY;
   if (!apiKey) {
     throw new Error(
@@ -76,16 +77,20 @@ async function searchYouTube(query) {
     );
   }
 
+  const maxResults = Math.max(1, Math.min(25, Number(options.maxResults) || 8));
+  const shortOnly = Boolean(options.shortOnly);
   const params = new URLSearchParams({
     part: "snippet",
     type: "video",
-    maxResults: "8",
-    q: query,
+    maxResults: String(maxResults),
+    q: shortOnly ? `${query} #shorts` : query,
     videoEmbeddable: "true",
     videoSyndicated: "true",
     safeSearch: "moderate",
     key: apiKey,
   });
+  if (shortOnly) params.set("videoDuration", "short");
+
   const data = await getJson(
     `https://www.googleapis.com/youtube/v3/search?${params.toString()}`
   );
@@ -102,6 +107,16 @@ async function searchYouTube(query) {
               .url || ""
           : "",
     }));
+}
+
+function playerCanControlRoom(metadata, playerID, credentials) {
+  if (!metadata || !metadata.players || playerID === undefined || playerID === null) {
+    return false;
+  }
+  const player = metadata.players[playerID];
+  if (!player) return false;
+  if (!player.credentials) return true;
+  return Boolean(credentials && credentials === player.credentials);
 }
 
 server.app.use(async (ctx, next) => {
@@ -129,12 +144,111 @@ server.app.use(async (ctx, next) => {
       return;
     }
     try {
-      const items = await searchYouTube(query);
+      const items = await searchYouTube(query, { maxResults: 8 });
       ctx.body = { success: true, items };
     } catch (err) {
       console.error("YouTube search error:", err.message);
       ctx.status = 500;
       ctx.body = { success: false, error: err.message };
+    }
+    return;
+  }
+
+  if (ctx.method === "GET" && ctx.path === "/api/youtube/shorts") {
+    const query = String(ctx.query.q || "").trim();
+    if (!query) {
+      ctx.status = 400;
+      ctx.body = { success: false, error: "Thiếu chủ đề Shorts." };
+      return;
+    }
+    if (query.length > 100) {
+      ctx.status = 400;
+      ctx.body = { success: false, error: "Chủ đề tìm kiếm quá dài." };
+      return;
+    }
+    try {
+      const items = await searchYouTube(query, {
+        maxResults: 20,
+        shortOnly: true,
+      });
+      ctx.body = { success: true, items };
+    } catch (err) {
+      console.error("YouTube Shorts search error:", err.message);
+      ctx.status = 500;
+      ctx.body = { success: false, error: err.message };
+    }
+    return;
+  }
+
+  if (
+    ctx.method === "POST" &&
+    ctx.path.startsWith("/api/rooms/") &&
+    ctx.path.endsWith("/rematch")
+  ) {
+    const matchID = ctx.path
+      .replace("/api/rooms/", "")
+      .replace(/\/rematch$/, "");
+    const playerID = String(ctx.get("x-player-id") || "");
+    const credentials = String(ctx.get("x-player-credentials") || "");
+
+    try {
+      const result = await server.db.fetch(matchID, {
+        state: true,
+        metadata: true,
+      });
+      const oldState = result && result.state;
+      const metadata = result && result.metadata;
+
+      if (!oldState || !metadata) {
+        ctx.status = 404;
+        ctx.body = { success: false, error: "Bàn này không còn tồn tại." };
+        return;
+      }
+      if (!playerCanControlRoom(metadata, playerID, credentials)) {
+        ctx.status = 403;
+        ctx.body = { success: false, error: "Không có quyền đánh lại bàn này." };
+        return;
+      }
+      if (!oldState.ctx || oldState.ctx.gameover === undefined) {
+        ctx.status = 409;
+        ctx.body = { success: false, error: "Ván hiện tại chưa kết thúc." };
+        return;
+      }
+
+      const numPlayers =
+        (metadata.players && Object.keys(metadata.players).length) ||
+        (oldState.ctx && oldState.ctx.numPlayers) ||
+        2;
+      const nextState = InitializeGame({ game: TienLen, numPlayers });
+
+      // Media belongs to the table, not to a single round. Keep the current
+      // music queue/playback while dealing a completely new deck.
+      if (oldState.G && oldState.G.musicRoom) {
+        nextState.G.musicRoom = oldState.G.musicRoom;
+      }
+
+      const nextMetadata = { ...metadata };
+      delete nextMetadata.gameover;
+      nextMetadata.updatedAt = Date.now();
+
+      // Keep the same match ID + seats + credentials. Only the round state is reset.
+      await server.db.createGame(matchID, {
+        initialState: nextState,
+        metadata: nextMetadata,
+      });
+
+      // Finished bot clients stop themselves at game-over. Clearing the local
+      // registry here guarantees the watchdog reconnects every bot to the same seats.
+      stopBotsForMatch(matchID);
+
+      console.log(
+        `[REMATCH][boot=${BOOT_ID}] match=${matchID} player=${playerID} players=${numPlayers}`
+      );
+      ctx.body = { success: true, matchID, numPlayers };
+    } catch (err) {
+      console.error("Rematch error:", err);
+      ctx.status = 500;
+      ctx.body = { success: false, error: err.message || "Không thể đánh lại." };
     }
     return;
   }
