@@ -6,6 +6,7 @@ import "./index.scss";
 import "./premium-v2.scss";
 import "./final-polish.scss";
 import "./integration-fixes.scss";
+import "./media-layout.scss";
 import { default as App } from "./App";
 import LobbyView from "./components/LobbyView";
 import LobbyIdentityGuard from "./components/LobbyIdentityGuard";
