@@ -38,6 +38,11 @@ export default class GameArea extends Component {
         this.props.G.lastEmote && this.props.G.lastEmote.playerID === idxStr
           ? this.props.G.lastEmote
           : null;
+      const throwReaction =
+        this.props.G.lastThrow &&
+        this.props.G.lastThrow.targetPlayerID === idxStr
+          ? this.props.G.lastThrow
+          : null;
 
       return (
         <div className={`premium-seat premium-seat--${seat}`} key={idxStr}>
@@ -47,6 +52,7 @@ export default class GameArea extends Component {
             className={statusClass}
             winner={winner}
             emote={emote}
+            throwReaction={throwReaction}
           />
           <div className="premium-seat__cards" aria-hidden="true">
             <span />
