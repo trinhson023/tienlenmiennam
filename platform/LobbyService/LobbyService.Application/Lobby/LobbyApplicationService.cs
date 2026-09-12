@@ -26,6 +26,14 @@ public sealed class LobbyApplicationService(ILobbyRepository repository)
             : ServiceResult<RoomDetails>.Success(MapDetails(room));
     }
 
+    public async Task<ServiceResult<RoomDetails>> GetCurrentRoomForUserAsync(Guid userId, CancellationToken ct)
+    {
+        var room = await repository.GetRoomForUserAsync(userId, ct);
+        return room is null
+            ? ServiceResult<RoomDetails>.Failure("not_in_room", "Bạn chưa vào phòng nào.")
+            : ServiceResult<RoomDetails>.Success(MapDetails(room));
+    }
+
     public async Task<ServiceResult<RoomDetails>> CreateRoomAsync(PlayerIdentity player, CreateRoomRequest request, CancellationToken ct)
     {
         var currentRoom = await repository.GetRoomForUserAsync(player.UserId, ct);

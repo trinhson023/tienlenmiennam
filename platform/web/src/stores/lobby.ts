@@ -126,6 +126,16 @@ export const useLobbyStore = defineStore('lobby', {
       hub.on('RoomUpdated', (room: RoomDetails) => {
         if (this.currentRoom?.id === room.id) this.currentRoom = room
       })
+      hub.onreconnected(async () => {
+        try {
+          await hub.invoke('SubscribeLobby')
+          if (this.currentRoom?.id) {
+            await hub.invoke('SubscribeRoom', this.currentRoom.id)
+            await this.loadRoom(this.currentRoom.id)
+          }
+          await this.loadRooms()
+        } catch { /* ignore */ }
+      })
       await hub.start()
       await hub.invoke('SubscribeLobby')
       this.hub = hub
@@ -137,10 +147,22 @@ export const useLobbyStore = defineStore('lobby', {
     async unsubscribeRoom(roomId: string) {
       if (this.hub?.state === 'Connected') await this.hub.invoke('UnsubscribeRoom', roomId)
     },
+    async loadCurrentRoom() {
+      try {
+        const { data } = await api.get<RoomDetails | null>('/api/lobby/rooms/me')
+        this.currentRoom = data
+        if (data?.id) {
+          await this.subscribeRoom(data.id)
+        }
+      } catch {
+        this.currentRoom = null
+      }
+    },
     async initialize() {
       await this.loadGames()
       await this.loadRooms()
       await this.ensureHub()
+      await this.loadCurrentRoom()
     }
   }
 })

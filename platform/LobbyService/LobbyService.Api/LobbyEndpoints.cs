@@ -13,6 +13,13 @@ public static class LobbyEndpoints
 
         group.MapGet("/games", async (LobbyApplicationService service, CancellationToken ct) => Results.Ok(await service.ListGamesAsync(ct)));
         group.MapGet("/rooms", async (string? game, LobbyApplicationService service, CancellationToken ct) => Results.Ok(await service.ListRoomsAsync(game, ct)));
+        group.MapGet("/rooms/me", async (ClaimsPrincipal principal, LobbyApplicationService service, CancellationToken ct) =>
+        {
+            var userId = GetUserId(principal);
+            if (userId is null) return Results.Unauthorized();
+            var result = await service.GetCurrentRoomForUserAsync(userId.Value, ct);
+            return result.IsSuccess ? Results.Ok(result.Value) : Results.Ok(null);
+        });
         group.MapGet("/rooms/{roomId:guid}", async (Guid roomId, LobbyApplicationService service, CancellationToken ct) => Map(await service.GetRoomAsync(roomId, ct)));
 
         group.MapPost("/rooms", async (CreateRoomRequest request, ClaimsPrincipal principal, LobbyApplicationService service, IHubContext<LobbyHub> hub, CancellationToken ct) =>
