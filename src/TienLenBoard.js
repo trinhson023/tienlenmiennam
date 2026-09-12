@@ -19,6 +19,13 @@ import {
   setSoundEnabled,
 } from "./utils/soundEffects";
 
+function centerSignature(cards) {
+  if (!cards || cards.length === 0) return "";
+  return cards
+    .map(card => `${card && card.rank ? card.rank : "?"}${card && card.suit ? card.suit : "?"}`)
+    .join("|");
+}
+
 class TienLenBoard extends Component {
   constructor(props) {
     super(props);
@@ -53,12 +60,17 @@ class TienLenBoard extends Component {
 
     const prevCenter = prevProps.G.center || [];
     const currentCenter = this.props.G.center || [];
+
+    // boardgame.io recreates / serializes state objects after many unrelated
+    // actions (sort hand, emote, music control, etc.). Object identity therefore
+    // cannot be used to decide whether somebody actually played a card.
+    // Compare the actual rank+suit contents instead so center VFX only fires on
+    // a real new play.
+    const prevCenterSignature = centerSignature(prevCenter);
+    const currentCenterSignature = centerSignature(currentCenter);
     const centerChanged =
       currentCenter.length > 0 &&
-      currentCenter !== prevCenter &&
-      (prevCenter.length === 0 ||
-        currentCenter[0] !== prevCenter[0] ||
-        currentCenter.length !== prevCenter.length);
+      currentCenterSignature !== prevCenterSignature;
 
     if (centerChanged) {
       const chopped = prevCenter.length > 0 && validChop(prevCenter, currentCenter);
