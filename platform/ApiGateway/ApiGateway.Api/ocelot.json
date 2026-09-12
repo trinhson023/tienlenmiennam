@@ -1,53 +1,13 @@
 {
   "Routes": [
-    {
-      "DownstreamPathTemplate": "/health",
-      "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [{ "Host": "identity-api", "Port": 8080 }],
-      "UpstreamPathTemplate": "/identity/health",
-      "UpstreamHttpMethod": ["GET"]
-    },
-    {
-      "DownstreamPathTemplate": "/health",
-      "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [{ "Host": "lobby-api", "Port": 8080 }],
-      "UpstreamPathTemplate": "/lobby/health",
-      "UpstreamHttpMethod": ["GET"]
-    },
-    {
-      "DownstreamPathTemplate": "/health",
-      "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [{ "Host": "tienlen-api", "Port": 8080 }],
-      "UpstreamPathTemplate": "/tienlen/health",
-      "UpstreamHttpMethod": ["GET"]
-    },
-    {
-      "DownstreamPathTemplate": "/api/auth/{everything}",
-      "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [{ "Host": "identity-api", "Port": 8080 }],
-      "UpstreamPathTemplate": "/api/auth/{everything}",
-      "UpstreamHttpMethod": ["GET", "POST", "PUT", "DELETE"]
-    },
-    {
-      "DownstreamPathTemplate": "/api/{everything}",
-      "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [{ "Host": "lobby-api", "Port": 8080 }],
-      "UpstreamPathTemplate": "/api/lobby/{everything}",
-      "UpstreamHttpMethod": ["GET", "POST", "PUT", "DELETE"]
-    },
-    {
-      "DownstreamPathTemplate": "/api/{everything}",
-      "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [{ "Host": "tienlen-api", "Port": 8080 }],
-      "UpstreamPathTemplate": "/api/tienlen/{everything}",
-      "UpstreamHttpMethod": ["GET", "POST", "PUT", "DELETE"]
-    },
-    {
-      "DownstreamPathTemplate": "/hubs/tienlen",
-      "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [{ "Host": "tienlen-api", "Port": 8080 }],
-      "UpstreamPathTemplate": "/hubs/tienlen"
-    }
+    { "DownstreamPathTemplate": "/health", "DownstreamScheme": "http", "DownstreamHostAndPorts": [{ "Host": "identity-api", "Port": 8080 }], "UpstreamPathTemplate": "/identity/health", "UpstreamHttpMethod": ["GET"] },
+    { "DownstreamPathTemplate": "/health", "DownstreamScheme": "http", "DownstreamHostAndPorts": [{ "Host": "lobby-api", "Port": 8080 }], "UpstreamPathTemplate": "/lobby/health", "UpstreamHttpMethod": ["GET"] },
+    { "DownstreamPathTemplate": "/health", "DownstreamScheme": "http", "DownstreamHostAndPorts": [{ "Host": "tienlen-api", "Port": 8080 }], "UpstreamPathTemplate": "/tienlen/health", "UpstreamHttpMethod": ["GET"] },
+    { "DownstreamPathTemplate": "/api/auth/{everything}", "DownstreamScheme": "http", "DownstreamHostAndPorts": [{ "Host": "identity-api", "Port": 8080 }], "UpstreamPathTemplate": "/api/auth/{everything}", "UpstreamHttpMethod": ["GET", "POST", "PUT", "DELETE"] },
+    { "DownstreamPathTemplate": "/api/{everything}", "DownstreamScheme": "http", "DownstreamHostAndPorts": [{ "Host": "lobby-api", "Port": 8080 }], "UpstreamPathTemplate": "/api/lobby/{everything}", "UpstreamHttpMethod": ["GET", "POST", "PUT", "DELETE"] },
+    { "DownstreamPathTemplate": "/api/{everything}", "DownstreamScheme": "http", "DownstreamHostAndPorts": [{ "Host": "tienlen-api", "Port": 8080 }], "UpstreamPathTemplate": "/api/tienlen/{everything}", "UpstreamHttpMethod": ["GET", "POST", "PUT", "DELETE"] },
+    { "DownstreamPathTemplate": "/hubs/lobby", "DownstreamScheme": "http", "DownstreamHostAndPorts": [{ "Host": "lobby-api", "Port": 8080 }], "UpstreamPathTemplate": "/hubs/lobby" },
+    { "DownstreamPathTemplate": "/hubs/tienlen", "DownstreamScheme": "http", "DownstreamHostAndPorts": [{ "Host": "tienlen-api", "Port": 8080 }], "UpstreamPathTemplate": "/hubs/tienlen" }
   ],
   "GlobalConfiguration": { "BaseUrl": "http://localhost:8888" }
 }

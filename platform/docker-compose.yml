@@ -56,6 +56,7 @@ services:
       ASPNETCORE_ENVIRONMENT: Development
       Database__Provider: Postgres
       ConnectionStrings__RoyalDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB:-royal_game};Username=${POSTGRES_USER:-royal};Password=${POSTGRES_PASSWORD:-royal_dev}
+      Jwt__Secret: ${JWT_SECRET:-CHANGE_ME_IN_REAL_ENVIRONMENT_MINIMUM_32_CHARS}
     depends_on:
       postgres:
         condition: service_healthy
