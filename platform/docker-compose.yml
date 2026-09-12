@@ -1,0 +1,109 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-royal_game}
+      POSTGRES_USER: ${POSTGRES_USER:-royal}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-royal_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - royal_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-royal} -d ${POSTGRES_DB:-royal_game}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - royal_rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  identity-api:
+    build:
+      context: ./IdentityService
+      dockerfile: IdentityService.Api/Dockerfile
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Development
+      Database__Provider: Postgres
+      ConnectionStrings__RoyalDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB:-royal_game};Username=${POSTGRES_USER:-royal};Password=${POSTGRES_PASSWORD:-royal_dev}
+      Jwt__Secret: ${JWT_SECRET:-CHANGE_ME_IN_REAL_ENVIRONMENT_MINIMUM_32_CHARS}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5101:8080"
+
+  lobby-api:
+    build:
+      context: ./LobbyService
+      dockerfile: LobbyService.Api/Dockerfile
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Development
+      Database__Provider: Postgres
+      ConnectionStrings__RoyalDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB:-royal_game};Username=${POSTGRES_USER:-royal};Password=${POSTGRES_PASSWORD:-royal_dev}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "5102:8080"
+
+  tienlen-api:
+    build:
+      context: ./TienLenService
+      dockerfile: TienLenService.Api/Dockerfile
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Development
+      Database__Provider: Postgres
+      ConnectionStrings__RoyalDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB:-royal_game};Username=${POSTGRES_USER:-royal};Password=${POSTGRES_PASSWORD:-royal_dev}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "5103:8080"
+
+  api-gateway:
+    build:
+      context: ./ApiGateway
+      dockerfile: ApiGateway.Api/Dockerfile
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Development
+    depends_on:
+      - identity-api
+      - lobby-api
+      - tienlen-api
+    ports:
+      - "8888:8080"
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    depends_on:
+      - api-gateway
+    ports:
+      - "8080:80"
+
+volumes:
+  royal_postgres_data:
+  royal_rabbitmq_data:
