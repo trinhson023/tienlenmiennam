@@ -34,10 +34,16 @@ export default class PlayerArea extends Component {
         throw new Error(data.error || "Không thể đánh lại trên bàn này.");
       }
 
-      // boardgame.io 0.39 does not expose a public force-resync hook on the
-      // Board props. Reload the lobby and let LobbyResumeGuard reopen the same
-      // gameID using the existing lobby credential.
-      window.location.href = `/?resume=${encodeURIComponent(this.props.gameID)}`;
+      // Keep the entire React tree mounted so page scroll + YouTube/Shorts
+      // iframes survive the rematch. The custom client factory listens for
+      // this event and asks boardgame.io to sync the same gameID in-place.
+      window.dispatchEvent(
+        new CustomEvent("tienlen:force-sync", {
+          detail: { gameID: this.props.gameID },
+        })
+      );
+
+      this.setState({ rematchLoading: false, rematchError: "" });
     } catch (err) {
       this.setState({
         rematchLoading: false,
