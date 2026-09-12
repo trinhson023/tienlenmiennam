@@ -1,4 +1,7 @@
+using IdentityService.Application.Abstractions;
 using IdentityService.Infrastructure.Persistence;
+using IdentityService.Infrastructure.Repositories;
+using IdentityService.Infrastructure.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,6 +20,12 @@ public static class DependencyInjection
             else if (provider is "postgres" or "postgresql") options.UseNpgsql(cs);
             else throw new NotSupportedException($"Unsupported database provider '{provider}'.");
         });
+
+        services.Configure<JwtSettings>(configuration.GetSection("Jwt"));
+        services.AddScoped<IIdentityRepository, IdentityRepository>();
+        services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
+        services.AddSingleton<ITokenService, JwtTokenService>();
+        services.AddScoped<IdentitySeeder>();
         return services;
     }
 }

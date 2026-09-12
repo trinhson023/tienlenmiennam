@@ -22,7 +22,7 @@
       "UpstreamHttpMethod": ["GET"]
     },
     {
-      "DownstreamPathTemplate": "/api/{everything}",
+      "DownstreamPathTemplate": "/api/auth/{everything}",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [{ "Host": "identity-api", "Port": 8080 }],
       "UpstreamPathTemplate": "/api/auth/{everything}",
@@ -49,7 +49,5 @@
       "UpstreamPathTemplate": "/hubs/tienlen"
     }
   ],
-  "GlobalConfiguration": {
-    "BaseUrl": "http://localhost:8888"
-  }
+  "GlobalConfiguration": { "BaseUrl": "http://localhost:8888" }
 }
