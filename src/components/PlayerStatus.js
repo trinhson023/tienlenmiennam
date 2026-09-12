@@ -3,6 +3,12 @@ import React, { PureComponent } from "react";
 import PropTypes from "prop-types";
 import Emoji from "a11y-react-emoji";
 
+const THROW_EMOJI = {
+  bomb: "💣",
+  tomato: "🍅",
+  poop: "💩",
+};
+
 function getInitials(name) {
   if (!name) return "P";
   return name
@@ -18,22 +24,29 @@ export default class PlayerStatus extends PureComponent {
     super(props);
     this.state = {
       activeEmote: null,
+      activeThrow: null,
     };
     this.emoteTimeout = null;
+    this.throwTimeout = null;
   }
 
   componentDidMount() {
     this.checkEmote(this.props.emote);
+    this.checkThrow(this.props.throwReaction);
   }
 
   componentDidUpdate(prevProps) {
     if (this.props.emote !== prevProps.emote) {
       this.checkEmote(this.props.emote);
     }
+    if (this.props.throwReaction !== prevProps.throwReaction) {
+      this.checkThrow(this.props.throwReaction);
+    }
   }
 
   componentWillUnmount() {
     if (this.emoteTimeout) clearTimeout(this.emoteTimeout);
+    if (this.throwTimeout) clearTimeout(this.throwTimeout);
   }
 
   checkEmote(emote) {
@@ -46,6 +59,21 @@ export default class PlayerStatus extends PureComponent {
     }
   }
 
+  checkThrow(reaction) {
+    if (reaction && Date.now() - reaction.time < 3500) {
+      this.setState({
+        activeThrow: {
+          type: reaction.type,
+          key: `${reaction.time}-${reaction.fromPlayerID}`,
+        },
+      });
+      if (this.throwTimeout) clearTimeout(this.throwTimeout);
+      this.throwTimeout = setTimeout(() => {
+        this.setState({ activeThrow: null });
+      }, 1800);
+    }
+  }
+
   render() {
     const isCurrent =
       this.props.className && this.props.className.includes("current-player-status");
@@ -53,12 +81,32 @@ export default class PlayerStatus extends PureComponent {
       this.props.className && this.props.className.includes("passed-player-status");
     const isNotYetWon =
       this.props.winner === -1 || this.props.winner === undefined;
+    const throwType = this.state.activeThrow && this.state.activeThrow.type;
 
     return (
-      <div className={`${this.props.className} premium-player-card`}>
+      <div
+        className={`${this.props.className} premium-player-card${
+          throwType ? ` premium-player-card--hit premium-player-card--hit-${throwType}` : ""
+        }`}
+      >
         {this.state.activeEmote && (
           <div className="chat-bubble premium-chat-bubble">
             {this.state.activeEmote}
+          </div>
+        )}
+
+        {this.state.activeThrow && (
+          <div
+            className={`premium-throw-hit premium-throw-hit--${throwType}`}
+            key={this.state.activeThrow.key}
+            aria-hidden="true"
+          >
+            <span className="premium-throw-projectile">
+              {THROW_EMOJI[throwType] || "💥"}
+            </span>
+            <span className="premium-throw-impact">
+              {throwType === "bomb" ? "💥" : throwType === "tomato" ? "💦" : "🤢"}
+            </span>
           </div>
         )}
 
@@ -119,4 +167,5 @@ PlayerStatus.propTypes = {
   className: PropTypes.string,
   winner: PropTypes.number,
   emote: PropTypes.object,
+  throwReaction: PropTypes.object,
 };
