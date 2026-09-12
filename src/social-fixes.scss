@@ -1,0 +1,76 @@
+/* Social interaction fixes loaded last. */
+
+.premium-control-actions .quick-chat-container {
+  position: relative;
+  z-index: 1200;
+}
+
+.premium-control-actions .quick-chat-menu {
+  left: auto !important;
+  right: 0 !important;
+  transform: none !important;
+  width: 340px;
+  max-width: min(340px, calc(100vw - 28px));
+  z-index: 5000 !important;
+}
+
+.quick-chat-throw-hint {
+  margin-top: 7px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(255, 214, 102, 0.06);
+  color: rgba(255, 235, 181, 0.62);
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.premium-throw-hit {
+  inset: -26px !important;
+  z-index: 200 !important;
+  overflow: visible !important;
+}
+
+.premium-throw-projectile {
+  font-size: 3.35rem !important;
+  filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.55));
+  animation-duration: 0.78s !important;
+}
+
+.premium-throw-impact {
+  font-size: 4.1rem !important;
+  filter: drop-shadow(0 0 14px rgba(255, 214, 102, 0.5));
+}
+
+.premium-player-card--hit {
+  z-index: 50 !important;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 215, 100, 0.55),
+    0 0 34px rgba(255, 183, 43, 0.38) !important;
+}
+
+.premium-player-card--hit-bomb {
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 153, 0, 0.75),
+    0 0 42px rgba(255, 86, 26, 0.5) !important;
+}
+
+.premium-player-card--hit-tomato {
+  box-shadow:
+    inset 0 0 0 2px rgba(248, 113, 113, 0.78),
+    0 0 36px rgba(239, 68, 68, 0.38) !important;
+}
+
+.premium-player-card--hit-poop {
+  box-shadow:
+    inset 0 0 0 2px rgba(180, 120, 63, 0.82),
+    0 0 36px rgba(120, 72, 32, 0.42) !important;
+}
+
+@media screen and (max-width: 760px) {
+  .premium-control-actions .quick-chat-menu {
+    right: 50% !important;
+    transform: translateX(50%) !important;
+    width: min(330px, calc(100vw - 22px));
+  }
+}
