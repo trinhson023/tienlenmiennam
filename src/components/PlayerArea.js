@@ -9,6 +9,43 @@ import QuickChat from "./QuickChat";
 const _ = require("lodash");
 
 export default class PlayerArea extends Component {
+  constructor(props) {
+    super(props);
+    this.state = {
+      rematchLoading: false,
+      rematchError: "",
+    };
+  }
+
+  handleRematch = async () => {
+    if (this.state.rematchLoading || !this.props.matchID) return;
+
+    this.setState({ rematchLoading: true, rematchError: "" });
+    try {
+      const response = await fetch(`/api/rooms/${this.props.matchID}/rematch`, {
+        method: "POST",
+        headers: {
+          "x-player-id": String(this.props.playerID || ""),
+          "x-player-credentials": String(this.props.credentials || ""),
+        },
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Không thể đánh lại trên bàn này.");
+      }
+
+      // boardgame.io 0.39 does not expose a clean "resync this match now"
+      // hook to the board component. Reload the lobby and let the resume helper
+      // open the SAME match ID again using the credential stored in lobbyState.
+      window.location.href = `/?resume=${encodeURIComponent(this.props.matchID)}`;
+    } catch (err) {
+      this.setState({
+        rematchLoading: false,
+        rematchError: err.message || "Không thể đánh lại.",
+      });
+    }
+  };
+
   renderGameOver(playerID) {
     const winnersList =
       (this.props.ctx.gameover && this.props.ctx.gameover.winners) ||
@@ -23,18 +60,6 @@ export default class PlayerArea extends Component {
     const hasBots =
       this.props.gameMetadata &&
       this.props.gameMetadata.some(p => p.name && p.name.includes("Bot"));
-    const numPlayers =
-      this.props.ctx.numPlayers ||
-      (this.props.gameMetadata && this.props.gameMetadata.length) ||
-      Object.keys(this.props.G.players || {}).length ||
-      2;
-    const replayQuery = hasBots
-      ? numPlayers >= 4
-        ? "quick4=true"
-        : "quick2=true"
-      : numPlayers >= 4
-      ? "human4=true"
-      : "";
 
     return (
       <div className="gameover-container">
@@ -59,18 +84,18 @@ export default class PlayerArea extends Component {
             );
           })}
         </div>
+        <div className="premium-rematch-copy">
+          {hasBots
+            ? "Giữ nguyên bàn và ghế Bot, chia bài mới ngay tại đây."
+            : "Giữ nguyên bàn và toàn bộ người chơi, bắt đầu ván mới."}
+        </div>
         <div className="premium-gameover-actions">
           <button
             className="play-active"
-            onClick={() => {
-              window.location.href = replayQuery ? `/?${replayQuery}` : "/";
-            }}
+            onClick={this.handleRematch}
+            disabled={this.state.rematchLoading}
           >
-            {hasBots
-              ? numPlayers >= 4
-                ? "🔥 Đánh Lại (vs 3 Bot AI)"
-                : "🔥 Đánh Lại (vs Bot AI)"
-              : "🌟 Tạo Bàn Mới Cùng Nhóm"}
+            {this.state.rematchLoading ? "⏳ Đang chia bài..." : "🔥 Đánh Lại Trên Bàn Này"}
           </button>
           <button
             className="play-active premium-secondary-action"
@@ -81,6 +106,9 @@ export default class PlayerArea extends Component {
             ↩ Trở Về Sảnh
           </button>
         </div>
+        {this.state.rematchError && (
+          <div className="premium-rematch-error">{this.state.rematchError}</div>
+        )}
       </div>
     );
   }
@@ -197,4 +225,6 @@ PlayerArea.propTypes = {
   moves: PropTypes.object,
   playerID: PropTypes.string,
   gameMetadata: PropTypes.array,
+  matchID: PropTypes.string,
+  credentials: PropTypes.string,
 };
