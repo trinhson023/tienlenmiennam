@@ -19,6 +19,15 @@ import {
 import { compareCards } from "./moves/helper-functions/cardComparison";
 const _ = require("lodash");
 
+export const TURN_TIME_MS = 60 * 1000;
+
+function beginTimedTurn(G) {
+  const now = Date.now();
+  G.turnStartedAt = now;
+  G.turnDeadline = now + TURN_TIME_MS;
+  return G;
+}
+
 function sendEmote(G, ctx, text) {
   G.lastEmote = {
     playerID: ctx.playerID,
@@ -159,6 +168,7 @@ const TienLen = {
     order: {
       first: G => G.firstPlayer,
     },
+    onBegin: beginTimedTurn,
     activePlayers: {
       currentPlayer: { stage: Stage.NULL },
       others: { stage: "notTurn" },
@@ -234,6 +244,8 @@ function setUp(ctx) {
     cardsLeft,
     lastEmote: null,
     lastPlayBy: null,
+    turnStartedAt: null,
+    turnDeadline: null,
     musicRoom: {
       current: null,
       queue: [],
