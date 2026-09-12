@@ -28,7 +28,11 @@ async function loadTargetRoom(matchID) {
   }
 }
 
-function findMatchingLobbyRow(targetRoom, playerName) {
+function findMatchingLobbyRow(matchID, targetRoom, playerName) {
+  const exact = document.querySelector(
+    `#instances tr[data-game-id="${matchID}"]`
+  );
+  if (exact) return exact;
   if (!targetRoom) return null;
 
   const occupiedNames = (targetRoom.players || [])
@@ -36,8 +40,6 @@ function findMatchingLobbyRow(targetRoom, playerName) {
     .filter(Boolean);
   const rows = Array.from(document.querySelectorAll("#instances tr"));
 
-  // The stock boardgame.io 0.39 lobby row does not render gameID, so match the
-  // room by its exact occupied seat names. Prefer rows containing our own name.
   const candidates = rows.filter(row => {
     const text = row.textContent || "";
     return occupiedNames.every(name => text.includes(name));
@@ -45,7 +47,9 @@ function findMatchingLobbyRow(targetRoom, playerName) {
 
   if (candidates.length === 1) return candidates[0];
   if (playerName) {
-    const ownRow = candidates.find(row => (row.textContent || "").includes(playerName));
+    const ownRow = candidates.find(row =>
+      (row.textContent || "").includes(playerName)
+    );
     if (ownRow) return ownRow;
   }
   return candidates[0] || null;
@@ -64,6 +68,7 @@ export default function LobbyResumeGuard() {
     let cancelled = false;
     let attempts = 0;
     let targetRoom = null;
+    let retryTimer = null;
 
     const tryResume = async () => {
       if (cancelled) return;
@@ -73,7 +78,7 @@ export default function LobbyResumeGuard() {
         targetRoom = await loadTargetRoom(matchID);
       }
 
-      const row = findMatchingLobbyRow(targetRoom, playerName);
+      const row = findMatchingLobbyRow(matchID, targetRoom, playerName);
       if (row) {
         const buttons = Array.from(row.querySelectorAll("button"));
         const play = buttons.find(
@@ -92,13 +97,14 @@ export default function LobbyResumeGuard() {
         return;
       }
 
-      window.setTimeout(tryResume, 250);
+      retryTimer = window.setTimeout(tryResume, 250);
     };
 
     const startTimer = window.setTimeout(tryResume, 150);
     return () => {
       cancelled = true;
       window.clearTimeout(startTimer);
+      if (retryTimer) window.clearTimeout(retryTimer);
     };
   }, []);
 
