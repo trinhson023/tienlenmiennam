@@ -4,31 +4,40 @@ namespace TienLenService.Domain.Rules;
 
 public static class CombinationDetector
 {
-    public static CombinationType Detect(IReadOnlyCollection<Card> cards)
+    public static CombinationType Detect(IReadOnlyCollection<Card> cards) => TryCreate(cards)?.Type ?? CombinationType.Invalid;
+
+    public static Combination? TryCreate(IReadOnlyCollection<Card>? cards)
     {
-        if (cards.Count == 0) return CombinationType.Invalid;
-        if (cards.Count == 1) return CombinationType.Single;
+        if (cards is null || cards.Count == 0) return null;
 
-        var ordered = cards.OrderBy(c => (int)c.Rank).ThenBy(c => (int)c.Suit).ToArray();
-        var groups = ordered.GroupBy(c => c.Rank).ToArray();
+        var ordered = cards.OrderBy(c => c, CardComparer.Instance).ToArray();
+        if (ordered.Distinct().Count() != ordered.Length) return null;
+        var groups = ordered.GroupBy(c => c.Rank).OrderBy(g => (int)g.Key).ToArray();
 
-        if (cards.Count == 2 && groups.Length == 1) return CombinationType.Pair;
-        if (cards.Count == 3 && groups.Length == 1) return CombinationType.Triple;
-        if (cards.Count == 4 && groups.Length == 1) return CombinationType.FourOfAKind;
+        if (ordered.Length == 1) return new Combination(CombinationType.Single, ordered);
+        if (ordered.Length == 2 && groups.Length == 1) return new Combination(CombinationType.Pair, ordered);
+        if (ordered.Length == 3 && groups.Length == 1) return new Combination(CombinationType.Triple, ordered);
 
-        if (cards.Count >= 3 && groups.Length == cards.Count && ordered.All(c => c.Rank != Rank.Two))
+        // Preserve the legacy rules: four 2s are not a legal four-of-a-kind play.
+        if (ordered.Length == 4 && groups.Length == 1 && groups[0].Key != Rank.Two)
+            return new Combination(CombinationType.FourOfAKind, ordered);
+
+        if (ordered.Length >= 3 && groups.Length == ordered.Length && ordered.All(c => c.Rank != Rank.Two))
         {
             var ranks = ordered.Select(c => (int)c.Rank).ToArray();
-            if (ranks.Zip(ranks.Skip(1), (a, b) => b - a).All(diff => diff == 1)) return CombinationType.Straight;
+            if (IsConsecutive(ranks)) return new Combination(CombinationType.Straight, ordered);
         }
 
-        if (cards.Count is 6 or 8 && groups.All(g => g.Count() == 2))
+        if (ordered.Length is 6 or 8 && groups.All(g => g.Count() == 2))
         {
-            var ranks = groups.Select(g => (int)g.Key).OrderBy(x => x).ToArray();
-            if (ranks.All(x => x != (int)Rank.Two) && ranks.Zip(ranks.Skip(1), (a, b) => b - a).All(diff => diff == 1))
-                return cards.Count == 6 ? CombinationType.ThreeConsecutivePairs : CombinationType.FourConsecutivePairs;
+            var ranks = groups.Select(g => (int)g.Key).ToArray();
+            if (ranks.All(x => x != (int)Rank.Two) && IsConsecutive(ranks))
+                return new Combination(ordered.Length == 6 ? CombinationType.ThreeConsecutivePairs : CombinationType.FourConsecutivePairs, ordered);
         }
 
-        return CombinationType.Invalid;
+        return null;
     }
+
+    private static bool IsConsecutive(IReadOnlyList<int> ranks) =>
+        ranks.Count > 0 && ranks.Zip(ranks.Skip(1), (a, b) => b - a).All(diff => diff == 1);
 }
