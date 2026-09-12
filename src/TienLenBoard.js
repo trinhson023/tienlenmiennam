@@ -6,6 +6,7 @@ import { DragDropContext } from "react-beautiful-dnd";
 import GameArea from "./components/GameArea";
 import GameHUD from "./components/GameHUD";
 import MusicRoom from "./components/MusicRoom";
+import ShortsLounge from "./components/ShortsLounge";
 import PlayerArea from "./components/PlayerArea";
 import { validChop } from "./moves/helper-functions/cardComparison";
 import {
@@ -130,30 +131,39 @@ class TienLenBoard extends Component {
       : "";
 
     return (
-      <div className={`game premium-table-shell${fxClass}`}>
-        <GameHUD {...this.props} />
-        <div className="premium-utility-bar">
-          <button
-            className="premium-sound-toggle"
-            onClick={this.toggleSound}
-            title="Bật / tắt hiệu ứng âm thanh"
-          >
-            {this.state.soundEnabled ? "🔊 SFX" : "🔇 SFX"}
-          </button>
-          <span className="premium-utility-hint">Kéo hoặc click bài để chọn</span>
-        </div>
-        <DragDropContext onDragEnd={this.props.moves.relocateCards}>
-          <GameArea {...this.props} />
-          <div className="premium-player-dock">
-            <PlayerArea {...this.props} />
+      <div className="premium-media-layout">
+        <aside className="premium-media-rail premium-media-rail--left">
+          <ShortsLounge />
+        </aside>
+
+        <div className={`game premium-table-shell${fxClass}`}>
+          <GameHUD {...this.props} />
+          <div className="premium-utility-bar">
+            <button
+              className="premium-sound-toggle"
+              onClick={this.toggleSound}
+              title="Bật / tắt hiệu ứng âm thanh"
+            >
+              {this.state.soundEnabled ? "🔊 SFX" : "🔇 SFX"}
+            </button>
+            <span className="premium-utility-hint">Kéo hoặc click bài để chọn</span>
           </div>
-        </DragDropContext>
-        <MusicRoom
-          G={this.props.G}
-          playerID={this.props.playerID}
-          moves={this.props.moves}
-        />
-        {this.renderEffect()}
+          <DragDropContext onDragEnd={this.props.moves.relocateCards}>
+            <GameArea {...this.props} />
+            <div className="premium-player-dock">
+              <PlayerArea {...this.props} />
+            </div>
+          </DragDropContext>
+          {this.renderEffect()}
+        </div>
+
+        <aside className="premium-media-rail premium-media-rail--right">
+          <MusicRoom
+            G={this.props.G}
+            playerID={this.props.playerID}
+            moves={this.props.moves}
+          />
+        </aside>
       </div>
     );
   }
@@ -165,6 +175,8 @@ TienLenBoard.propTypes = {
   moves: PropTypes.object,
   playerID: PropTypes.string,
   gameMetadata: PropTypes.array,
+  matchID: PropTypes.string,
+  credentials: PropTypes.string,
 };
 
 export default TienLenBoard;
