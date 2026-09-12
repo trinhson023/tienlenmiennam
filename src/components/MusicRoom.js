@@ -97,6 +97,24 @@ export default function MusicRoom({ G, playerID, moves }) {
     }
   };
 
+  const loadTrackLocally = (videoId, startSeconds = 0) => {
+    const player = playerRef.current;
+    if (!player || !videoId) return;
+    try {
+      player.loadVideoById({
+        videoId,
+        startSeconds: Math.max(0, Number(startSeconds) || 0),
+      });
+      lastLoadedVideoRef.current = videoId;
+      player.setVolume(volume);
+      if (muted) player.mute();
+      else player.unMute();
+      setLocalPosition(Math.max(0, Number(startSeconds) || 0));
+    } catch (e) {
+      setPlayerError("Không thể đổi bài ngay lúc này.");
+    }
+  };
+
   useEffect(() => {
     if (window.YT && window.YT.Player) {
       setPlayerReady(true);
@@ -142,6 +160,7 @@ export default function MusicRoom({ G, playerID, moves }) {
         onReady: event => {
           event.target.setVolume(volume);
           if (muted) event.target.mute();
+          else event.target.unMute();
         },
         onError: () =>
           setPlayerError("Video này không phát được trong trình nhúng."),
@@ -167,12 +186,6 @@ export default function MusicRoom({ G, playerID, moves }) {
     };
   }, [playerReady]);
 
-  /*
-   * IMPORTANT: this effect only depends on primitive MUSIC playback state.
-   * boardgame.io recreates G objects after normal card moves; depending on room/current
-   * object identity caused the old player sync effect to run again during gameplay and
-   * could reload/seek the YouTube iframe. Card moves must not touch playback.
-   */
   useEffect(() => {
     const player = playerRef.current;
     if (!player || !currentVideoId || !unlocked) return;
@@ -194,6 +207,9 @@ export default function MusicRoom({ G, playerID, moves }) {
           });
         }
         lastLoadedVideoRef.current = currentVideoId;
+        player.setVolume(volume);
+        if (muted) player.mute();
+        else player.unMute();
         return;
       }
 
@@ -292,6 +308,7 @@ export default function MusicRoom({ G, playerID, moves }) {
       lastLoadedVideoRef.current = currentVideoId;
       player.setVolume(volume);
       if (muted) player.mute();
+      else player.unMute();
       if (!room.playing) player.pauseVideo();
     } catch (e) {
       setPlayerError("Không thể bật nhạc. Thử đóng/mở Music Room rồi bấm lại.");
@@ -305,6 +322,7 @@ export default function MusicRoom({ G, playerID, moves }) {
     const pastedId = extractVideoId(value);
     if (pastedId) {
       rememberUnlocked(true);
+      loadTrackLocally(pastedId, 0);
       moves.musicSelect &&
         moves.musicSelect({ videoId: pastedId, title: "YouTube video" });
       setResults([]);
@@ -330,6 +348,13 @@ export default function MusicRoom({ G, playerID, moves }) {
 
   const playTrack = item => {
     rememberUnlocked(true);
+    setPlayerError("");
+
+    // Optimistically switch the host's iframe right away. The synced game move
+    // then broadcasts the selected video to every other player. This avoids a
+    // stale iframe when choosing a second search result while the current track
+    // is already playing.
+    loadTrackLocally(item.videoId, 0);
     moves.musicSelect && moves.musicSelect(item);
   };
 
