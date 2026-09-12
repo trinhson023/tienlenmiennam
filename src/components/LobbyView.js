@@ -7,6 +7,7 @@ import { Lobby } from "boardgame.io/react";
 import { GAME_SERVER_URL, WEB_SERVER_URL, APP_PRODUCTION } from "../config";
 import { default as BoardTienLen } from "../TienLenBoard";
 import { default as GameTienLen } from "../TienLen";
+import RematchAwareClientFactory from "./RematchAwareClientFactory";
 import Rules from "./Rules";
 import "./lobby.scss";
 
@@ -62,7 +63,6 @@ function QuickBotHelper() {
     fetchRooms();
     const interval = setInterval(fetchRooms, 3000);
 
-    // Tự động tạo bàn mới nếu được gọi từ nút "Chơi Tiếp Ván Mới"
     if (window.location.search.includes("quick4=true")) {
       window.history.replaceState({}, document.title, "/");
       setTimeout(() => {
@@ -96,7 +96,6 @@ function QuickBotHelper() {
       const createData = await createRes.json();
       const matchID = createData.gameID;
 
-      // Mời bot vào (chừa ghế 0 cho người chơi)
       const fillRes = await fetch(`/api/bot/fill/${matchID}?leaveHuman=true`, {
         method: "POST",
       });
@@ -111,7 +110,6 @@ function QuickBotHelper() {
         );
         await fetchRooms();
 
-        // Tự động tìm và bấm nút Join vào bàn vừa tạo
         setTimeout(() => {
           try {
             const rows = document.querySelectorAll("#instances tr");
@@ -178,7 +176,6 @@ function QuickBotHelper() {
       );
       await fetchRooms();
 
-      // Tự động tìm và bấm nút Join vào bàn vừa tạo
       setTimeout(() => {
         try {
           const rows = document.querySelectorAll("#instances tr");
@@ -564,6 +561,7 @@ function LobbyView() {
                   gameServer={gameServer}
                   lobbyServer={lobbyServer}
                   gameComponents={importedGames}
+                  clientFactory={RematchAwareClientFactory}
                 />
               </div>
             </div>
