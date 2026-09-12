@@ -9,6 +9,7 @@ import "./integration-fixes.scss";
 import { default as App } from "./App";
 import LobbyView from "./components/LobbyView";
 import LobbyIdentityGuard from "./components/LobbyIdentityGuard";
+import LobbyResumeGuard from "./components/LobbyResumeGuard";
 import * as serviceWorker from "./serviceWorker";
 import { LOBBY } from "./config";
 
@@ -16,6 +17,7 @@ if (LOBBY) {
   ReactDOM.render(
     <React.StrictMode>
       <LobbyIdentityGuard />
+      <LobbyResumeGuard />
       <LobbyView />
     </React.StrictMode>,
     document.getElementById("root")
