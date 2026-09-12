@@ -11,6 +11,7 @@ import { default as App } from "./App";
 import LobbyView from "./components/LobbyView";
 import LobbyIdentityGuard from "./components/LobbyIdentityGuard";
 import LobbyResumeGuard from "./components/LobbyResumeGuard";
+import LobbyRoomTagger from "./components/LobbyRoomTagger";
 import * as serviceWorker from "./serviceWorker";
 import { LOBBY } from "./config";
 
@@ -18,6 +19,7 @@ if (LOBBY) {
   ReactDOM.render(
     <React.StrictMode>
       <LobbyIdentityGuard />
+      <LobbyRoomTagger />
       <LobbyResumeGuard />
       <LobbyView />
     </React.StrictMode>,
