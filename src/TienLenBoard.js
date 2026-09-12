@@ -175,7 +175,7 @@ TienLenBoard.propTypes = {
   moves: PropTypes.object,
   playerID: PropTypes.string,
   gameMetadata: PropTypes.array,
-  matchID: PropTypes.string,
+  gameID: PropTypes.string,
   credentials: PropTypes.string,
 };
 
