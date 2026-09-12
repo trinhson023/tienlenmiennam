@@ -1,0 +1,393 @@
+/* Small integration layer loaded after final-polish.scss. */
+
+.music-room__panel--hidden {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(12px) scale(0.98);
+}
+
+.music-room__panel {
+  transform-origin: right bottom;
+  transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
+}
+
+.music-room__unlock {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 5;
+  transform: translate(-50%, -50%);
+  margin: 0 !important;
+  padding: 9px 15px !important;
+  border: 1px solid rgba(255, 218, 103, 0.72) !important;
+  border-radius: 999px !important;
+  background: rgba(4, 23, 15, 0.94) !important;
+  color: #ffebb0 !important;
+  font-size: 0.78rem !important;
+  font-weight: 900 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55), 0 0 22px rgba(255, 211, 81, 0.18) !important;
+}
+
+/* Card sorting / staging toolbar */
+.table-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px;
+  border-radius: 13px;
+  border: 1px solid rgba(244, 208, 111, 0.16);
+  background: rgba(2, 15, 10, 0.52);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.035);
+}
+
+.table-tool,
+.table-tool--active {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  margin: 0 !important;
+  padding: 6px 9px !important;
+  border: 1px solid rgba(255, 255, 255, 0.07) !important;
+  border-radius: 9px !important;
+  background: rgba(255, 255, 255, 0.045) !important;
+  color: rgba(238, 243, 240, 0.78) !important;
+  font-size: 0.68rem !important;
+  font-weight: 800 !important;
+  box-shadow: none !important;
+}
+
+.table-tool:hover,
+.table-tool--active:hover {
+  border-color: rgba(244, 208, 111, 0.38) !important;
+  background: rgba(244, 208, 111, 0.09) !important;
+  color: #fff0b9 !important;
+  transform: translateY(-1px);
+}
+
+.table-tool__icon {
+  color: #f4d06f;
+  font-size: 0.83rem;
+  line-height: 1;
+}
+
+.premium-control-actions .table-tools {
+  margin-right: 3px;
+}
+
+.premium-secondary-action {
+  background: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  box-shadow: none !important;
+}
+
+/* 60s authoritative turn timer */
+.premium-hud__timer {
+  min-width: 86px;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.premium-hud__timer strong {
+  font-variant-numeric: tabular-nums;
+  min-width: 34px;
+  text-align: center;
+}
+
+.premium-hud__timer.is-urgent {
+  border-color: rgba(251, 191, 36, 0.55) !important;
+  background: rgba(120, 68, 5, 0.22) !important;
+}
+
+.premium-hud__timer.is-urgent strong {
+  color: #fcd34d !important;
+}
+
+.premium-hud__timer.is-critical {
+  border-color: rgba(248, 113, 113, 0.78) !important;
+  background: rgba(127, 29, 29, 0.28) !important;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.18) !important;
+  animation: turnTimerCritical 0.8s ease-in-out infinite alternate;
+}
+
+.premium-hud__timer.is-critical strong {
+  color: #fecaca !important;
+}
+
+@keyframes turnTimerCritical {
+  from { transform: scale(1); }
+  to { transform: scale(1.035); }
+}
+
+/* Custom taunts + throwable reactions */
+.quick-chat-custom {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.quick-chat-custom input {
+  min-width: 0;
+  padding: 8px 9px;
+  border-radius: 9px;
+  border: 1px solid rgba(244, 208, 111, 0.22);
+  background: rgba(0, 0, 0, 0.26);
+  color: #fff;
+  outline: none;
+}
+
+.quick-chat-custom input:focus {
+  border-color: rgba(244, 208, 111, 0.62);
+  box-shadow: 0 0 0 2px rgba(244, 208, 111, 0.08);
+}
+
+.quick-chat-title--throw {
+  margin-top: 10px;
+}
+
+.quick-chat-throwables {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.quick-chat-throw {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 54px;
+  padding: 6px !important;
+  border-radius: 10px !important;
+  border: 1px solid rgba(255,255,255,.08) !important;
+  background: rgba(255,255,255,.045) !important;
+}
+
+.quick-chat-throw span {
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+.quick-chat-throw small {
+  font-size: .58rem;
+  color: rgba(255,255,255,.72);
+}
+
+.quick-chat-throw.is-selected {
+  border-color: rgba(255, 214, 102, 0.65) !important;
+  background: rgba(255, 214, 102, 0.12) !important;
+  box-shadow: 0 0 16px rgba(255, 204, 55, 0.1) !important;
+}
+
+.quick-chat-targets {
+  margin-top: 7px;
+  padding: 7px;
+  border-radius: 10px;
+  border: 1px solid rgba(244, 208, 111, 0.15);
+  background: rgba(0,0,0,.18);
+}
+
+.quick-chat-targets > span {
+  display: block;
+  margin-bottom: 5px;
+  color: rgba(255, 235, 181, .72);
+  font-size: .65rem;
+  font-weight: 800;
+}
+
+.quick-chat-targets > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.quick-chat-targets button {
+  margin: 0 !important;
+  padding: 5px 8px !important;
+  font-size: .62rem !important;
+}
+
+.premium-player-card {
+  overflow: visible !important;
+}
+
+.premium-throw-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.premium-throw-projectile,
+.premium-throw-impact {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.premium-throw-projectile {
+  z-index: 2;
+  font-size: 2.2rem;
+  animation: throwProjectile 0.62s cubic-bezier(.18,.8,.32,1) both;
+}
+
+.premium-throw-impact {
+  z-index: 1;
+  font-size: 2.5rem;
+  opacity: 0;
+  animation: throwImpact 0.65s 0.46s ease-out both;
+}
+
+.premium-player-card--hit {
+  animation: throwVictimShake .42s .48s ease-in-out both !important;
+}
+
+.premium-player-card--hit-tomato::after,
+.premium-player-card--hit-poop::after,
+.premium-player-card--hit-bomb::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  z-index: 20;
+  pointer-events: none;
+  border-radius: 19px;
+  opacity: 0;
+  animation: throwStain 1.45s .55s ease-out both;
+}
+
+.premium-player-card--hit-tomato::after {
+  background: radial-gradient(circle at 45% 45%, rgba(239,68,68,.62) 0 8%, transparent 9%), radial-gradient(circle at 65% 35%, rgba(185,28,28,.48) 0 5%, transparent 6%);
+}
+
+.premium-player-card--hit-poop::after {
+  background: radial-gradient(circle at 52% 48%, rgba(120,72,32,.6) 0 10%, transparent 11%), radial-gradient(circle at 34% 63%, rgba(92,54,26,.42) 0 6%, transparent 7%);
+}
+
+.premium-player-card--hit-bomb::after {
+  background: radial-gradient(circle, rgba(255,255,255,.38) 0 4%, rgba(245,158,11,.26) 5% 19%, transparent 36%);
+}
+
+@keyframes throwProjectile {
+  0% { opacity: 0; transform: translate(-190%, -190%) scale(.55) rotate(-35deg); }
+  65% { opacity: 1; transform: translate(-48%, -56%) scale(1.12) rotate(18deg); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(.86) rotate(0); }
+}
+
+@keyframes throwImpact {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.3); }
+  35% { opacity: 1; transform: translate(-50%, -50%) scale(1.35); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.85); }
+}
+
+@keyframes throwVictimShake {
+  0%, 100% { transform: translateX(0) rotate(0); }
+  20% { transform: translateX(-7px) rotate(-1.2deg); }
+  40% { transform: translateX(7px) rotate(1.2deg); }
+  60% { transform: translateX(-4px) rotate(-.6deg); }
+  80% { transform: translateX(4px) rotate(.6deg); }
+}
+
+@keyframes throwStain {
+  0% { opacity: 0; transform: scale(.6); }
+  18% { opacity: .95; transform: scale(1); }
+  72% { opacity: .72; }
+  100% { opacity: 0; transform: scale(1.08); }
+}
+
+@keyframes cardFlyFromTop {
+  0% { opacity: 0; transform: translateY(-120px) scale(0.78) rotate(-8deg); }
+  65% { opacity: 1; transform: translateY(6px) scale(1.03) rotate(2deg); }
+  100% { transform: translateY(0) scale(1) rotate(0); }
+}
+
+@keyframes cardFlyFromLeft {
+  0% { opacity: 0; transform: translateX(-180px) translateY(-10px) scale(0.78) rotate(-12deg); }
+  65% { opacity: 1; transform: translateX(7px) scale(1.03) rotate(2deg); }
+  100% { transform: translateX(0) scale(1) rotate(0); }
+}
+
+@keyframes cardFlyFromRight {
+  0% { opacity: 0; transform: translateX(180px) translateY(-10px) scale(0.78) rotate(12deg); }
+  65% { opacity: 1; transform: translateX(-7px) scale(1.03) rotate(-2deg); }
+  100% { transform: translateX(0) scale(1) rotate(0); }
+}
+
+@keyframes cardFlyFromSelf {
+  0% { opacity: 0; transform: translateY(145px) scale(0.82) rotate(5deg); }
+  65% { opacity: 1; transform: translateY(-6px) scale(1.03) rotate(-1deg); }
+  100% { transform: translateY(0) scale(1) rotate(0); }
+}
+
+.game-vfx-play .premium-center-zone--from-top .premium-center-cards .card {
+  animation-name: cardFlyFromTop !important;
+}
+
+.game-vfx-play .premium-center-zone--from-left .premium-center-cards .card {
+  animation-name: cardFlyFromLeft !important;
+}
+
+.game-vfx-play .premium-center-zone--from-right .premium-center-cards .card {
+  animation-name: cardFlyFromRight !important;
+}
+
+.game-vfx-play .premium-center-zone--from-self .premium-center-cards .card {
+  animation-name: cardFlyFromSelf !important;
+}
+
+.game-vfx-play .premium-center-cards li:nth-child(2) .card,
+.game-vfx-chop .premium-center-cards li:nth-child(2) .card {
+  animation-delay: 0.035s;
+}
+
+.game-vfx-play .premium-center-cards li:nth-child(3) .card,
+.game-vfx-chop .premium-center-cards li:nth-child(3) .card {
+  animation-delay: 0.07s;
+}
+
+.game-vfx-play .premium-center-cards li:nth-child(4) .card,
+.game-vfx-chop .premium-center-cards li:nth-child(4) .card {
+  animation-delay: 0.105s;
+}
+
+.game-vfx-play .premium-center-cards li:nth-child(5) .card,
+.game-vfx-chop .premium-center-cards li:nth-child(5) .card {
+  animation-delay: 0.14s;
+}
+
+.game-vfx-play .premium-center-cards li:nth-child(6) .card,
+.game-vfx-chop .premium-center-cards li:nth-child(6) .card {
+  animation-delay: 0.175s;
+}
+
+@media screen and (max-width: 760px) {
+  .table-tools {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .table-tool,
+  .table-tool--active {
+    flex: 1;
+    justify-content: center;
+    min-width: 92px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-event__label,
+  .game-event__shock,
+  .premium-center-cards .card,
+  .premium-control-staging .card,
+  .current-player-status.premium-player-card,
+  .premium-hud__timer.is-critical,
+  .premium-throw-projectile,
+  .premium-throw-impact,
+  .premium-player-card--hit,
+  .premium-player-card--hit::after {
+    animation: none !important;
+  }
+}

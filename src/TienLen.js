@@ -19,13 +19,135 @@ import {
 import { compareCards } from "./moves/helper-functions/cardComparison";
 const _ = require("lodash");
 
+export const TURN_TIME_MS = 60 * 1000;
+
+const THROW_TYPES = ["bomb", "tomato", "poop"];
+
+function beginTimedTurn(G) {
+  const now = Date.now();
+  G.turnStartedAt = now;
+  G.turnDeadline = now + TURN_TIME_MS;
+  return G;
+}
+
+function sanitizeChatText(text) {
+  return String(text || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
+
 function sendEmote(G, ctx, text) {
+  const clean = sanitizeChatText(text);
+  if (!clean) return;
   G.lastEmote = {
     playerID: ctx.playerID,
-    text: text,
+    text: clean,
     time: Date.now(),
   };
 }
+
+function throwReaction(G, ctx, type, targetPlayerID) {
+  const cleanType = String(type || "");
+  const target = String(targetPlayerID || "");
+  const from = String(ctx.playerID || "");
+  if (!THROW_TYPES.includes(cleanType)) return;
+  if (!Object.prototype.hasOwnProperty.call(G.players, target)) return;
+  if (target === from) return;
+
+  G.lastThrow = {
+    type: cleanType,
+    fromPlayerID: from,
+    targetPlayerID: target,
+    time: Date.now(),
+  };
+}
+
+function isMusicHost(ctx) {
+  return ctx.playerID !== undefined && String(ctx.playerID) === "0";
+}
+
+function safeTrack(track) {
+  if (!track || !track.videoId) return null;
+  return {
+    videoId: String(track.videoId).slice(0, 32),
+    title: String(track.title || "YouTube").slice(0, 160),
+    channelTitle: String(track.channelTitle || "").slice(0, 100),
+    thumbnail: String(track.thumbnail || "").slice(0, 500),
+  };
+}
+
+function musicSelect(G, ctx, track) {
+  if (!isMusicHost(ctx)) return;
+  const clean = safeTrack(track);
+  if (!clean) return;
+  G.musicRoom.current = clean;
+  G.musicRoom.playing = true;
+  G.musicRoom.position = 0;
+  G.musicRoom.startedAt = Date.now();
+  G.musicRoom.revision += 1;
+}
+
+function musicQueue(G, ctx, track) {
+  if (!isMusicHost(ctx)) return;
+  const clean = safeTrack(track);
+  if (!clean) return;
+  G.musicRoom.queue = G.musicRoom.queue.concat(clean).slice(0, 20);
+  G.musicRoom.revision += 1;
+}
+
+function musicToggle(G, ctx, playing, position) {
+  if (!isMusicHost(ctx) || !G.musicRoom.current) return;
+  const pos = Math.max(0, Number(position) || 0);
+  G.musicRoom.position = pos;
+  G.musicRoom.playing = Boolean(playing);
+  G.musicRoom.startedAt = playing ? Date.now() - pos * 1000 : null;
+  G.musicRoom.revision += 1;
+}
+
+function musicSeek(G, ctx, position) {
+  if (!isMusicHost(ctx) || !G.musicRoom.current) return;
+  const pos = Math.max(0, Number(position) || 0);
+  G.musicRoom.position = pos;
+  if (G.musicRoom.playing) {
+    G.musicRoom.startedAt = Date.now() - pos * 1000;
+  }
+  G.musicRoom.revision += 1;
+}
+
+function musicNext(G, ctx) {
+  if (!isMusicHost(ctx)) return;
+  if (G.musicRoom.queue.length > 0) {
+    const next = G.musicRoom.queue[0];
+    G.musicRoom.queue = G.musicRoom.queue.slice(1);
+    G.musicRoom.current = next;
+    G.musicRoom.playing = true;
+    G.musicRoom.position = 0;
+    G.musicRoom.startedAt = Date.now();
+  } else {
+    G.musicRoom.playing = false;
+    G.musicRoom.position = 0;
+    G.musicRoom.startedAt = null;
+  }
+  G.musicRoom.revision += 1;
+}
+
+function musicClearQueue(G, ctx) {
+  if (!isMusicHost(ctx)) return;
+  G.musicRoom.queue = [];
+  G.musicRoom.revision += 1;
+}
+
+const socialMoves = {
+  sendEmote,
+  throwReaction,
+  musicSelect,
+  musicQueue,
+  musicToggle,
+  musicSeek,
+  musicNext,
+  musicClearQueue,
+};
 
 const TienLen = {
   name: "tien-len",
@@ -33,17 +155,17 @@ const TienLen = {
   maxPlayers: 4,
   setup: setUp,
   moves: {
-    relocateCards: relocateCards,
-    clearStagingArea: clearStagingArea,
-    cardsToCenter: cardsToCenter,
-    passTurn: passTurn,
-    tienLenPlay: tienLenPlay,
-    sortStagingArea: sortStagingArea,
-    toggleCard: toggleCard,
-    sortHand: sortHand,
-    playCardsDirect: playCardsDirect,
-    tienLenPlayDirect: tienLenPlayDirect,
-    sendEmote: sendEmote,
+    relocateCards,
+    clearStagingArea,
+    cardsToCenter,
+    passTurn,
+    tienLenPlay,
+    sortStagingArea,
+    toggleCard,
+    sortHand,
+    playCardsDirect,
+    tienLenPlayDirect,
+    ...socialMoves,
   },
   stages: {
     tienLen: {
@@ -56,7 +178,7 @@ const TienLen = {
         clearStagingArea,
         sortStagingArea,
         relocateCards,
-        sendEmote,
+        ...socialMoves,
       },
     },
     notTurn: {
@@ -66,7 +188,7 @@ const TienLen = {
         sortStagingArea,
         toggleCard,
         sortHand,
-        sendEmote,
+        ...socialMoves,
       },
     },
   },
@@ -74,6 +196,7 @@ const TienLen = {
     order: {
       first: G => G.firstPlayer,
     },
+    onBegin: beginTimedTurn,
     activePlayers: {
       currentPlayer: { stage: Stage.NULL },
       others: { stage: "notTurn" },
@@ -84,7 +207,7 @@ const TienLen = {
     const numPlayers = ctx.numPlayers || Object.keys(G.players).length;
     if (G.winners.length === numPlayers - 1) {
       const allPlayers = Array.from({ length: numPlayers }, (_, i) => i.toString());
-      let w = G.winners.concat(
+      const w = G.winners.concat(
         allPlayers.filter(x => !G.winners.includes(x))
       );
       return { winners: w };
@@ -126,12 +249,11 @@ function setUp(ctx) {
     }
   }
 
-  // Nếu không ai có 3 Bích (xảy ra khi chơi 2 hoặc 3 người), người có lá bài nhỏ nhất sẽ đi trước
   if (!hasThreeSpades) {
     let minCard = null;
     let minPlayer = 0;
     for (let i = 0; i < numPlayers; i++) {
-      let playerLowest = chunkedDeck[i][0];
+      const playerLowest = chunkedDeck[i][0];
       if (!minCard || compareCards(playerLowest, minCard) === -1) {
         minCard = playerLowest;
         minPlayer = i;
@@ -143,13 +265,24 @@ function setUp(ctx) {
   return {
     turnOrder: initialTurnOrder,
     center: [],
-    players: players,
+    players,
     roundType: Combinations.ANY,
     winners: [],
-    firstPlayer: firstPlayer,
-    cardsLeft: cardsLeft,
+    firstPlayer,
+    cardsLeft,
     lastEmote: null,
+    lastThrow: null,
     lastPlayBy: null,
+    turnStartedAt: null,
+    turnDeadline: null,
+    musicRoom: {
+      current: null,
+      queue: [],
+      playing: false,
+      position: 0,
+      startedAt: null,
+      revision: 0,
+    },
   };
 }
 
