@@ -22,6 +22,7 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
         {
             entity.ToTable("users");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).ValueGeneratedNever();
             entity.Property(x => x.Username).HasMaxLength(32).IsRequired();
             entity.Property(x => x.NormalizedUsername).HasMaxLength(32).IsRequired();
             entity.HasIndex(x => x.NormalizedUsername).IsUnique();
@@ -37,6 +38,7 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
         {
             entity.ToTable("roles");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).ValueGeneratedNever();
             entity.Property(x => x.Name).HasMaxLength(64).IsRequired();
             entity.Property(x => x.NormalizedName).HasMaxLength(64).IsRequired();
             entity.HasIndex(x => x.NormalizedName).IsUnique();
@@ -48,6 +50,7 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
         {
             entity.ToTable("permissions");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).ValueGeneratedNever();
             entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
             entity.HasIndex(x => x.Name).IsUnique();
             entity.Property(x => x.Description).HasMaxLength(200).IsRequired();
@@ -71,6 +74,7 @@ public sealed class IdentityDbContext(DbContextOptions<IdentityDbContext> option
         {
             entity.ToTable("refresh_tokens");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.Id).ValueGeneratedNever();
             entity.Property(x => x.TokenHash).HasMaxLength(128).IsRequired();
             entity.HasIndex(x => x.TokenHash).IsUnique();
             entity.Property(x => x.ReplacedByTokenHash).HasMaxLength(128);

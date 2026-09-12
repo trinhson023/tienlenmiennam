@@ -71,7 +71,9 @@ public sealed class IdentityApplicationService(
 
         var replacement = tokenService.CreateRefreshToken();
         currentToken.Revoke(now, replacement.TokenHash);
-        user.AddRefreshToken(new RefreshToken(Guid.NewGuid(), user.Id, replacement.TokenHash, now, replacement.ExpiresAtUtc));
+        var token = new RefreshToken(Guid.NewGuid(), user.Id, replacement.TokenHash, now, replacement.ExpiresAtUtc);
+        user.AddRefreshToken(token);
+        await repository.AddRefreshTokenAsync(token, cancellationToken);
         var auth = await repository.GetAuthorizationAsync(user.Id, cancellationToken);
         var access = tokenService.CreateAccessToken(user, auth.Roles, auth.Permissions);
         await repository.SaveChangesAsync(cancellationToken);
@@ -108,7 +110,9 @@ public sealed class IdentityApplicationService(
         var auth = await repository.GetAuthorizationAsync(user.Id, cancellationToken);
         var access = tokenService.CreateAccessToken(user, auth.Roles, auth.Permissions);
         var refresh = tokenService.CreateRefreshToken();
-        user.AddRefreshToken(new RefreshToken(Guid.NewGuid(), user.Id, refresh.TokenHash, DateTimeOffset.UtcNow, refresh.ExpiresAtUtc));
+        var token = new RefreshToken(Guid.NewGuid(), user.Id, refresh.TokenHash, DateTimeOffset.UtcNow, refresh.ExpiresAtUtc);
+        user.AddRefreshToken(token);
+        await repository.AddRefreshTokenAsync(token, cancellationToken);
         await repository.SaveChangesAsync(cancellationToken);
         return new AuthSession(
             access.Token, access.ExpiresAtUtc, refresh.Token, refresh.ExpiresAtUtc,

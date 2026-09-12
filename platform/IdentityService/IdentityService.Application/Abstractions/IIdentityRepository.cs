@@ -13,5 +13,6 @@ public interface IIdentityRepository
     Task<RefreshToken?> GetRefreshTokenAsync(string tokenHash, CancellationToken cancellationToken);
     Task<(IReadOnlyCollection<string> Roles, IReadOnlyCollection<string> Permissions)> GetAuthorizationAsync(Guid userId, CancellationToken cancellationToken);
     Task AddUserAsync(User user, CancellationToken cancellationToken);
+    Task AddRefreshTokenAsync(RefreshToken token, CancellationToken cancellationToken);
     Task SaveChangesAsync(CancellationToken cancellationToken);
 }

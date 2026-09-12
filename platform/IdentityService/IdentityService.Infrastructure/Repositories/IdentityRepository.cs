@@ -43,5 +43,6 @@ public sealed class IdentityRepository(IdentityDbContext db) : IIdentityReposito
     }
 
     public Task AddUserAsync(User user, CancellationToken cancellationToken) => db.Users.AddAsync(user, cancellationToken).AsTask();
+    public Task AddRefreshTokenAsync(RefreshToken token, CancellationToken cancellationToken) => db.RefreshTokens.AddAsync(token, cancellationToken).AsTask();
     public Task SaveChangesAsync(CancellationToken cancellationToken) => db.SaveChangesAsync(cancellationToken);
 }

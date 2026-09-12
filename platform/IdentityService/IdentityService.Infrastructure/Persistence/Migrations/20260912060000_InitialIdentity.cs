@@ -47,8 +47,20 @@ public sealed class InitialIdentity : Migration
         }, constraints: table =>
         {
             table.PrimaryKey("PK_role_permissions", x => new { x.RoleId, x.PermissionId });
-            table.ForeignKey("FK_role_permissions_permissions_PermissionId", x => x.PermissionId, "identity", "permissions", "Id", onDelete: ReferentialAction.Cascade);
-            table.ForeignKey("FK_role_permissions_roles_RoleId", x => x.RoleId, "identity", "roles", "Id", onDelete: ReferentialAction.Cascade);
+            table.ForeignKey(
+                name: "FK_role_permissions_permissions_PermissionId",
+                column: x => x.PermissionId,
+                principalTable: "permissions",
+                principalSchema: "identity",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
+            table.ForeignKey(
+                name: "FK_role_permissions_roles_RoleId",
+                column: x => x.RoleId,
+                principalTable: "roles",
+                principalSchema: "identity",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
         });
 
         migrationBuilder.CreateTable(name: "refresh_tokens", schema: "identity", columns: table => new
@@ -63,7 +75,13 @@ public sealed class InitialIdentity : Migration
         }, constraints: table =>
         {
             table.PrimaryKey("PK_refresh_tokens", x => x.Id);
-            table.ForeignKey("FK_refresh_tokens_users_UserId", x => x.UserId, "identity", "users", "Id", onDelete: ReferentialAction.Cascade);
+            table.ForeignKey(
+                name: "FK_refresh_tokens_users_UserId",
+                column: x => x.UserId,
+                principalTable: "users",
+                principalSchema: "identity",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
         });
 
         migrationBuilder.CreateTable(name: "user_roles", schema: "identity", columns: table => new
@@ -73,8 +91,20 @@ public sealed class InitialIdentity : Migration
         }, constraints: table =>
         {
             table.PrimaryKey("PK_user_roles", x => new { x.UserId, x.RoleId });
-            table.ForeignKey("FK_user_roles_roles_RoleId", x => x.RoleId, "identity", "roles", "Id", onDelete: ReferentialAction.Cascade);
-            table.ForeignKey("FK_user_roles_users_UserId", x => x.UserId, "identity", "users", "Id", onDelete: ReferentialAction.Cascade);
+            table.ForeignKey(
+                name: "FK_user_roles_roles_RoleId",
+                column: x => x.RoleId,
+                principalTable: "roles",
+                principalSchema: "identity",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
+            table.ForeignKey(
+                name: "FK_user_roles_users_UserId",
+                column: x => x.UserId,
+                principalTable: "users",
+                principalSchema: "identity",
+                principalColumn: "Id",
+                onDelete: ReferentialAction.Cascade);
         });
 
         migrationBuilder.CreateIndex("IX_permissions_Name", "permissions", "Name", schema: "identity", unique: true);
