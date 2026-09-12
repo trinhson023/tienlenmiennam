@@ -7,6 +7,7 @@ import { InitializeGame } from "boardgame.io/internal";
 import serve from "koa-static";
 import path from "path";
 import { default as TienLen } from "./src/TienLen";
+import { startTurnTimerWatchdog } from "./turnTimer";
 import {
   spawnBotForMatch,
   fillBotsForMatch,
@@ -234,9 +235,6 @@ server.app.use(async (ctx, next) => {
 
       stopBotsForMatch(matchID);
 
-      // Tell every currently connected browser on the Tien Len namespace to
-      // request a fresh sync. Clients ignore the event unless gameID matches,
-      // so no page navigation or React remount is required.
       try {
         if (server.app && server.app._io) {
           server.app._io.of("tien-len").emit("table-rematch", matchID);
@@ -351,4 +349,5 @@ server.run(PORT, () => {
   );
   setServerDb(server.db);
   startBotWatchdog(PORT);
+  startTurnTimerWatchdog(server.db, PORT);
 });
