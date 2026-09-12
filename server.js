@@ -20,8 +20,6 @@ const PORT = process.env.PORT || 8000;
 const BOOT_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const server = Server({ games: [TienLen] });
 
-// Trace unexpected room deletion. This is intentionally noisy only when wipe()
-// is actually called, so we can distinguish a DB wipe from a process restart.
 if (server.db && typeof server.db.wipe === "function") {
   const originalWipe = server.db.wipe.bind(server.db);
   server.db.wipe = async matchID => {
@@ -221,8 +219,6 @@ server.app.use(async (ctx, next) => {
         2;
       const nextState = InitializeGame({ game: TienLen, numPlayers });
 
-      // Media belongs to the table, not to a single round. Keep the current
-      // music queue/playback while dealing a completely new deck.
       if (oldState.G && oldState.G.musicRoom) {
         nextState.G.musicRoom = oldState.G.musicRoom;
       }
@@ -231,15 +227,23 @@ server.app.use(async (ctx, next) => {
       delete nextMetadata.gameover;
       nextMetadata.updatedAt = Date.now();
 
-      // Keep the same match ID + seats + credentials. Only the round state is reset.
       await server.db.createGame(matchID, {
         initialState: nextState,
         metadata: nextMetadata,
       });
 
-      // Finished bot clients stop themselves at game-over. Clearing the local
-      // registry here guarantees the watchdog reconnects every bot to the same seats.
       stopBotsForMatch(matchID);
+
+      // Tell every currently connected browser on the Tien Len namespace to
+      // request a fresh sync. Clients ignore the event unless gameID matches,
+      // so no page navigation or React remount is required.
+      try {
+        if (server.app && server.app._io) {
+          server.app._io.of("tien-len").emit("table-rematch", matchID);
+        }
+      } catch (notifyErr) {
+        console.warn("Rematch notify warning:", notifyErr.message);
+      }
 
       console.log(
         `[REMATCH][boot=${BOOT_ID}] match=${matchID} player=${playerID} players=${numPlayers}`
