@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import PropTypes from "prop-types";
 
 const ROUND_LABELS = {
@@ -17,7 +17,22 @@ function getRoundLabel(roundType) {
   return ROUND_LABELS[roundType] || roundType;
 }
 
+function secondsLeft(deadline) {
+  if (!deadline) return 60;
+  return Math.max(0, Math.ceil((Number(deadline) - Date.now()) / 1000));
+}
+
 export default function GameHUD({ G, ctx, playerID, gameMetadata }) {
+  const [remaining, setRemaining] = useState(() => secondsLeft(G && G.turnDeadline));
+
+  useEffect(() => {
+    setRemaining(secondsLeft(G && G.turnDeadline));
+    const timer = setInterval(() => {
+      setRemaining(secondsLeft(G && G.turnDeadline));
+    }, 250);
+    return () => clearInterval(timer);
+  }, [G && G.turnDeadline, ctx && ctx.currentPlayer, ctx && ctx.turn]);
+
   const currentPlayerID =
     ctx && ctx.currentPlayer !== undefined && ctx.currentPlayer !== null
       ? String(ctx.currentPlayer)
@@ -36,6 +51,8 @@ export default function GameHUD({ G, ctx, playerID, gameMetadata }) {
     ? `Người chơi ${parseInt(currentPlayerID, 10) + 1}`
     : "—";
   const cardsOnTable = G && G.center ? G.center.length : 0;
+  const urgent = remaining <= 10;
+  const critical = remaining <= 5;
 
   return (
     <div className="premium-hud" aria-label="Thông tin ván đấu">
@@ -58,6 +75,16 @@ export default function GameHUD({ G, ctx, playerID, gameMetadata }) {
             </span>
             <strong>{isMyTurn ? "Ra bài thôi!" : currentName}</strong>
           </div>
+        </div>
+
+        <div
+          className={`premium-hud__metric premium-hud__timer ${
+            urgent ? "is-urgent" : ""
+          } ${critical ? "is-critical" : ""}`}
+          title="Mỗi lượt có tối đa 60 giây"
+        >
+          <span className="premium-hud__label">THỜI GIAN</span>
+          <strong>{remaining}s</strong>
         </div>
 
         <div className="premium-hud__metric">
