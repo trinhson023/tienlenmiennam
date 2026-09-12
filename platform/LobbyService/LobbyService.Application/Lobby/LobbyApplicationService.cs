@@ -4,7 +4,7 @@ using LobbyService.Domain.Rooms;
 
 namespace LobbyService.Application.Lobby;
 
-public sealed class LobbyApplicationService(ILobbyRepository repository)
+public sealed class LobbyApplicationService(ILobbyRepository repository, IMatchLauncher matchLauncher)
 {
     public async Task<IReadOnlyList<GameCatalogItem>> ListGamesAsync(CancellationToken ct)
     {
@@ -84,10 +84,31 @@ public sealed class LobbyApplicationService(ILobbyRepository repository)
         return ServiceResult<RoomDetails>.Success(MapDetails(room));
     }
 
+    public async Task<ServiceResult<RoomDetails>> StartMatchAsync(Guid roomId, Guid userId, CancellationToken ct)
+    {
+        var room = await repository.GetRoomAsync(roomId, ct);
+        if (room is null) return ServiceResult<RoomDetails>.Failure("room_not_found", "Không tìm thấy phòng.");
+        if (room.HostUserId != userId) return ServiceResult<RoomDetails>.Failure("host_only", "Chỉ host mới được bắt đầu ván.");
+        if (room.Status != RoomStatus.Open) return ServiceResult<RoomDetails>.Failure("room_not_open", "Phòng đã bắt đầu ván.");
+        if (room.Members.Count < room.GameDefinition.MinPlayers)
+            return ServiceResult<RoomDetails>.Failure("not_enough_players", $"Cần ít nhất {room.GameDefinition.MinPlayers} người để bắt đầu.");
+
+        var players = room.Members.OrderBy(x => x.SeatNumber)
+            .Select(x => new MatchLaunchPlayer(x.UserId, x.SeatNumber, x.Username, x.DisplayName)).ToArray();
+        var launch = await matchLauncher.StartAsync(room.GameDefinition.Slug, room.Id, players, ct);
+        if (!launch.IsSuccess || launch.MatchId is null)
+            return ServiceResult<RoomDetails>.Failure(launch.ErrorCode ?? "game_service_unavailable", launch.ErrorMessage ?? "Không khởi tạo được ván chơi.");
+
+        room.AttachMatch(launch.MatchId.Value);
+        await repository.SaveChangesAsync(ct);
+        return ServiceResult<RoomDetails>.Success(MapDetails(room));
+    }
+
     public async Task<ServiceResult<LeaveRoomResult>> LeaveRoomAsync(Guid roomId, Guid userId, CancellationToken ct)
     {
         var room = await repository.GetRoomAsync(roomId, ct);
         if (room is null) return ServiceResult<LeaveRoomResult>.Failure("room_not_found", "Không tìm thấy phòng.");
+        if (room.Status == RoomStatus.InGame) return ServiceResult<LeaveRoomResult>.Failure("match_in_progress", "Không thể rời phòng khi ván đang diễn ra.");
         if (!room.Leave(userId)) return ServiceResult<LeaveRoomResult>.Failure("not_in_room", "Bạn không ở trong phòng này.");
 
         if (room.Members.Count == 0)

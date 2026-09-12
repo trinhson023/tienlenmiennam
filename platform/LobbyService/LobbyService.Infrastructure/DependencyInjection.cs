@@ -1,4 +1,5 @@
 using LobbyService.Application.Abstractions;
+using LobbyService.Infrastructure.Integration;
 using LobbyService.Infrastructure.Persistence;
 using LobbyService.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -21,6 +22,11 @@ public static class DependencyInjection
         });
         services.AddScoped<ILobbyRepository, LobbyRepository>();
         services.AddScoped<LobbySeeder>();
+        services.AddHttpClient<IMatchLauncher, TienLenMatchLauncher>(client =>
+        {
+            client.BaseAddress = new Uri(configuration["TienLenService:BaseUrl"] ?? "http://tienlen-api:8080");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
         return services;
     }
 }

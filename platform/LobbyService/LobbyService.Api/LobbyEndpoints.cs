@@ -43,6 +43,18 @@ public static class LobbyEndpoints
             return Results.Ok(result.Value);
         });
 
+        group.MapPost("/rooms/{roomId:guid}/start", async (Guid roomId, ClaimsPrincipal principal, LobbyApplicationService service, IHubContext<LobbyHub> hub, CancellationToken ct) =>
+        {
+            var userId = GetUserId(principal);
+            if (userId is null) return Results.Unauthorized();
+            var result = await service.StartMatchAsync(roomId, userId.Value, ct);
+            if (!result.IsSuccess) return Map(result);
+            await hub.Clients.Group("lobby").SendAsync("RoomChanged", roomId, ct);
+            await hub.Clients.Group($"room:{roomId}").SendAsync("RoomUpdated", result.Value, ct);
+            await hub.Clients.Group($"room:{roomId}").SendAsync("MatchStarted", result.Value!.ActiveMatchId, ct);
+            return Results.Ok(result.Value);
+        });
+
         group.MapPost("/rooms/{roomId:guid}/leave", async (Guid roomId, ClaimsPrincipal principal, LobbyApplicationService service, IHubContext<LobbyHub> hub, CancellationToken ct) =>
         {
             var userId = GetUserId(principal);
@@ -84,8 +96,9 @@ public static class LobbyEndpoints
         var status = result.ErrorCode switch
         {
             "room_not_found" or "game_not_found" => StatusCodes.Status404NotFound,
-            "already_in_room" or "room_full" or "room_not_open" or "join_conflict" => StatusCodes.Status409Conflict,
-            "game_not_enabled" => StatusCodes.Status403Forbidden,
+            "host_only" or "game_not_enabled" => StatusCodes.Status403Forbidden,
+            "already_in_room" or "room_full" or "room_not_open" or "join_conflict" or "not_enough_players" or "match_in_progress" => StatusCodes.Status409Conflict,
+            "game_service_unavailable" or "game_service_error" => StatusCodes.Status502BadGateway,
             _ => StatusCodes.Status400BadRequest
         };
         return Results.Json(new { error = result.ErrorCode, message = result.ErrorMessage }, statusCode: status);
