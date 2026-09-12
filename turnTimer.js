@@ -48,6 +48,7 @@ function runTimeoutMove(matchID, playerID, credentials, port, expectedTurn) {
 
     const client = Client(config);
     let finished = false;
+    let hasActed = false;
     let unsubscribe = null;
 
     const cleanup = result => {
@@ -70,7 +71,7 @@ function runTimeoutMove(matchID, playerID, credentials, port, expectedTurn) {
 
     client.start();
     unsubscribe = client.subscribe(state => {
-      if (finished || !state || !state.G || !state.ctx) return;
+      if (finished || hasActed || !state || !state.G || !state.ctx) return;
 
       // The real player may have moved while the timeout client was connecting.
       // Never act on a newer turn or on a game that already ended.
@@ -84,6 +85,12 @@ function runTimeoutMove(matchID, playerID, credentials, port, expectedTurn) {
         clearTimeout(hardTimeout);
         cleanup(false);
         return;
+      }
+
+      hasActed = true;
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
       }
 
       const player = state.G.players && state.G.players[playerID];

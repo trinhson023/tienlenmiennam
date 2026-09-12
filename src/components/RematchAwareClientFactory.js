@@ -1,4 +1,6 @@
+/* eslint-disable react/prop-types */
 import React from "react";
+import PropTypes from "prop-types";
 import { Client as RawClient } from "boardgame.io/client";
 
 export default function RematchAwareClientFactory(opts) {
@@ -11,8 +13,8 @@ export default function RematchAwareClientFactory(opts) {
     enhancer,
   } = opts;
 
-  return class RematchAwareClient extends React.Component {
-    constructor(props) {
+    const RematchAwareClient = class extends React.Component {
+      constructor(props) {
       super(props);
       this.unsubscribe = null;
       this.client = RawClient({
@@ -136,4 +138,12 @@ export default function RematchAwareClientFactory(opts) {
       );
     }
   };
+
+  RematchAwareClient.propTypes = {
+    gameID: PropTypes.any,
+    playerID: PropTypes.any,
+    credentials: PropTypes.any,
+  };
+
+  return RematchAwareClient;
 }
