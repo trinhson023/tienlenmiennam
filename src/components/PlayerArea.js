@@ -18,11 +18,11 @@ export default class PlayerArea extends Component {
   }
 
   handleRematch = async () => {
-    if (this.state.rematchLoading || !this.props.matchID) return;
+    if (this.state.rematchLoading || !this.props.gameID) return;
 
     this.setState({ rematchLoading: true, rematchError: "" });
     try {
-      const response = await fetch(`/api/rooms/${this.props.matchID}/rematch`, {
+      const response = await fetch(`/api/rooms/${this.props.gameID}/rematch`, {
         method: "POST",
         headers: {
           "x-player-id": String(this.props.playerID || ""),
@@ -34,10 +34,10 @@ export default class PlayerArea extends Component {
         throw new Error(data.error || "Không thể đánh lại trên bàn này.");
       }
 
-      // boardgame.io 0.39 does not expose a clean "resync this match now"
-      // hook to the board component. Reload the lobby and let the resume helper
-      // open the SAME match ID again using the credential stored in lobbyState.
-      window.location.href = `/?resume=${encodeURIComponent(this.props.matchID)}`;
+      // boardgame.io 0.39 does not expose a public force-resync hook on the
+      // Board props. Reload the lobby and let LobbyResumeGuard reopen the same
+      // gameID using the existing lobby credential.
+      window.location.href = `/?resume=${encodeURIComponent(this.props.gameID)}`;
     } catch (err) {
       this.setState({
         rematchLoading: false,
@@ -225,6 +225,6 @@ PlayerArea.propTypes = {
   moves: PropTypes.object,
   playerID: PropTypes.string,
   gameMetadata: PropTypes.array,
-  matchID: PropTypes.string,
+  gameID: PropTypes.string,
   credentials: PropTypes.string,
 };
