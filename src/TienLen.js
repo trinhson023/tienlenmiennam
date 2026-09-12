@@ -21,6 +21,8 @@ const _ = require("lodash");
 
 export const TURN_TIME_MS = 60 * 1000;
 
+const THROW_TYPES = ["bomb", "tomato", "poop"];
+
 function beginTimedTurn(G) {
   const now = Date.now();
   G.turnStartedAt = now;
@@ -28,10 +30,35 @@ function beginTimedTurn(G) {
   return G;
 }
 
+function sanitizeChatText(text) {
+  return String(text || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
+
 function sendEmote(G, ctx, text) {
+  const clean = sanitizeChatText(text);
+  if (!clean) return;
   G.lastEmote = {
     playerID: ctx.playerID,
-    text: text,
+    text: clean,
+    time: Date.now(),
+  };
+}
+
+function throwReaction(G, ctx, type, targetPlayerID) {
+  const cleanType = String(type || "");
+  const target = String(targetPlayerID || "");
+  const from = String(ctx.playerID || "");
+  if (!THROW_TYPES.includes(cleanType)) return;
+  if (!Object.prototype.hasOwnProperty.call(G.players, target)) return;
+  if (target === from) return;
+
+  G.lastThrow = {
+    type: cleanType,
+    fromPlayerID: from,
+    targetPlayerID: target,
     time: Date.now(),
   };
 }
@@ -113,6 +140,7 @@ function musicClearQueue(G, ctx) {
 
 const socialMoves = {
   sendEmote,
+  throwReaction,
   musicSelect,
   musicQueue,
   musicToggle,
@@ -243,6 +271,7 @@ function setUp(ctx) {
     firstPlayer,
     cardsLeft,
     lastEmote: null,
+    lastThrow: null,
     lastPlayBy: null,
     turnStartedAt: null,
     turnDeadline: null,
