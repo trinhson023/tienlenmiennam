@@ -34,9 +34,6 @@ export default class PlayerArea extends Component {
         throw new Error(data.error || "Không thể đánh lại trên bàn này.");
       }
 
-      // Keep the entire React tree mounted so page scroll + YouTube/Shorts
-      // iframes survive the rematch. The custom client factory listens for
-      // this event and asks boardgame.io to sync the same gameID in-place.
       window.dispatchEvent(
         new CustomEvent("tienlen:force-sync", {
           detail: { gameID: this.props.gameID },
@@ -119,6 +116,22 @@ export default class PlayerArea extends Component {
     );
   }
 
+  renderQuickChat() {
+    return (
+      <QuickChat
+        playerID={this.props.playerID}
+        gameMetadata={this.props.gameMetadata}
+        onSendEmote={text =>
+          this.props.moves.sendEmote && this.props.moves.sendEmote(text)
+        }
+        onThrowReaction={(type, targetPlayerID) =>
+          this.props.moves.throwReaction &&
+          this.props.moves.throwReaction(type, targetPlayerID)
+        }
+      />
+    );
+  }
+
   render() {
     const playerID = this.props.playerID;
     const areaClass = getClassName(this.props, playerID, "player-area");
@@ -140,6 +153,11 @@ export default class PlayerArea extends Component {
       this.props.G.lastEmote && this.props.G.lastEmote.playerID === playerID
         ? this.props.G.lastEmote
         : null;
+    const throwReaction =
+      this.props.G.lastThrow &&
+      this.props.G.lastThrow.targetPlayerID === String(playerID)
+        ? this.props.G.lastThrow
+        : null;
 
     if (winner !== -1) {
       return (
@@ -153,15 +171,12 @@ export default class PlayerArea extends Component {
               }
               winner={winner}
               emote={emote}
+              throwReaction={throwReaction}
             />
             <div className="premium-finished-copy">
               🎉 Bạn đã đánh hết bài! Đang chờ ván kết thúc...
             </div>
-            <QuickChat
-              onSendEmote={text =>
-                this.props.moves.sendEmote && this.props.moves.sendEmote(text)
-              }
-            />
+            {this.renderQuickChat()}
           </div>
         </div>
       );
@@ -179,6 +194,7 @@ export default class PlayerArea extends Component {
               }
               winner={winner}
               emote={emote}
+              throwReaction={throwReaction}
             />
           </div>
 
@@ -201,11 +217,7 @@ export default class PlayerArea extends Component {
 
           <div className="premium-control-actions">
             <Buttons {...this.props} />
-            <QuickChat
-              onSendEmote={text =>
-                this.props.moves.sendEmote && this.props.moves.sendEmote(text)
-              }
-            />
+            {this.renderQuickChat()}
           </div>
         </div>
 
