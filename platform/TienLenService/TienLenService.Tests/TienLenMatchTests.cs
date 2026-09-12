@@ -66,12 +66,51 @@ public class TienLenMatchTests
         var finish = match.PlayCards(a, Cs("3S"));
         Assert.True(finish.PlayerFinished);
         Assert.Equal(b, match.CurrentPlayerId);
-        Assert.True(match.Pass(b).IsSuccess);
-        var reset = match.Pass(c);
+
+        var reset = match.Pass(b);
 
         Assert.True(reset.TrickReset);
-        Assert.Equal(b, match.CurrentPlayerId); // legacy "hưởng sái" after A has already finished
         Assert.Empty(match.Center);
+        Assert.Equal(b, match.CurrentPlayerId); // legacy "hưởng sái" after A has already finished
+    }
+
+    [Fact]
+    public void CannotPassWhenOpeningTrick()
+    {
+        var (match, a, _) = TwoPlayerMatch(Cs("3S", "4S"), Cs("5S", "6S"));
+        var pass = match.Pass(a);
+        Assert.False(pass.IsSuccess);
+        Assert.Equal(MatchActionError.CannotPassOpenRound, pass.Error);
+    }
+
+    [Fact]
+    public void CannotPlayOutOfTurn()
+    {
+        var (match, a, b) = TwoPlayerMatch(Cs("3S", "4S"), Cs("5S", "6S"));
+        var wrongTurn = match.PlayCards(b, Cs("5S"));
+        Assert.False(wrongTurn.IsSuccess);
+        Assert.Equal(MatchActionError.NotYourTurn, wrongTurn.Error);
+    }
+
+    [Fact]
+    public void CannotPlayCardsNotInHand()
+    {
+        var (match, a, _) = TwoPlayerMatch(Cs("3S", "4S"), Cs("5S", "6S"));
+        var notInHand = match.PlayCards(a, Cs("3S", "7S"));
+        Assert.False(notInHand.IsSuccess);
+        Assert.Equal(MatchActionError.CardNotOwned, notInHand.Error);
+    }
+
+    [Fact]
+    public void OpeningMoveCanBePairOrRunContainingThreeOfSpades()
+    {
+        var (matchPair, a1, _) = TwoPlayerMatch(Cs("3S", "3C"), Cs("5S", "6S"));
+        var playPair = matchPair.PlayCards(a1, Cs("3S", "3C"));
+        Assert.True(playPair.IsSuccess);
+
+        var (matchRun, a2, _) = TwoPlayerMatch(Cs("3S", "4S", "5S"), Cs("7S", "8S", "9S"));
+        var playRun = matchRun.PlayCards(a2, Cs("3S", "4S", "5S"));
+        Assert.True(playRun.IsSuccess);
     }
 
     [Fact]
