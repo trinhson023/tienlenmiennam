@@ -3,7 +3,7 @@
 import "dotenv/config";
 import https from "https";
 import { Server } from "boardgame.io/server";
-import { InitializeGame } from "boardgame.io/core";
+import { InitializeGame } from "boardgame.io/internal";
 import serve from "koa-static";
 import path from "path";
 import { default as TienLen } from "./src/TienLen";
