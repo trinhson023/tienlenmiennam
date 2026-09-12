@@ -27,6 +27,10 @@ export default function QuickChat({
   const [customText, setCustomText] = useState("");
   const [throwType, setThrowType] = useState(null);
 
+  const opponents = (gameMetadata || []).filter(
+    player => String(player.id) !== String(playerID) && player.name
+  );
+
   const handleSelect = text => {
     if (onSendEmote) onSendEmote(text);
     setIsOpen(false);
@@ -40,15 +44,24 @@ export default function QuickChat({
     setIsOpen(false);
   };
 
-  const opponents = (gameMetadata || []).filter(
-    player => String(player.id) !== String(playerID) && player.name
-  );
-
-  const chooseThrowTarget = targetPlayerID => {
-    if (!throwType || !onThrowReaction) return;
-    onThrowReaction(throwType, String(targetPlayerID));
+  const throwAt = (type, targetPlayerID) => {
+    if (!type || !onThrowReaction) return;
+    onThrowReaction(type, String(targetPlayerID));
     setThrowType(null);
     setIsOpen(false);
+  };
+
+  const selectThrowable = type => {
+    if (!onThrowReaction || opponents.length === 0) return;
+
+    // In a 1v1 table there is only one valid target, so make throwing a single
+    // click action instead of hiding a second target button below the menu.
+    if (opponents.length === 1) {
+      throwAt(type, opponents[0].id);
+      return;
+    }
+
+    setThrowType(throwType === type ? null : type);
   };
 
   return (
@@ -56,7 +69,10 @@ export default function QuickChat({
       <button
         type="button"
         className="quick-chat-toggle-btn"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          setIsOpen(!isOpen);
+          setThrowType(null);
+        }}
         title="Gáy / ném đồ"
       >
         💬 Gáy {isOpen ? "▲" : "▼"}
@@ -101,8 +117,12 @@ export default function QuickChat({
                 key={item.type}
                 type="button"
                 className={`quick-chat-throw ${throwType === item.type ? "is-selected" : ""}`}
-                onClick={() => setThrowType(throwType === item.type ? null : item.type)}
-                title={item.label}
+                onClick={() => selectThrowable(item.type)}
+                title={
+                  opponents.length === 1
+                    ? `${item.label} vào ${opponents[0].name}`
+                    : item.label
+                }
               >
                 <span>{item.emoji}</span>
                 <small>{item.label}</small>
@@ -110,7 +130,13 @@ export default function QuickChat({
             ))}
           </div>
 
-          {throwType && (
+          {opponents.length === 1 && (
+            <div className="quick-chat-throw-hint">
+              1v1: bấm món là ném thẳng vào {opponents[0].name}
+            </div>
+          )}
+
+          {throwType && opponents.length > 1 && (
             <div className="quick-chat-targets">
               <span>Ném vào ai?</span>
               <div>
@@ -118,7 +144,7 @@ export default function QuickChat({
                   <button
                     key={player.id}
                     type="button"
-                    onClick={() => chooseThrowTarget(player.id)}
+                    onClick={() => throwAt(throwType, player.id)}
                   >
                     {player.name}
                   </button>
