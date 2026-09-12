@@ -17,6 +17,15 @@ function loadSavedIndex() {
   }
 }
 
+function loadSavedMuted() {
+  try {
+    const raw = window.sessionStorage.getItem("tienlen.shorts.muted");
+    return raw === null ? true : raw === "1";
+  } catch (e) {
+    return true;
+  }
+}
+
 export default function ShortsLounge() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(() => {
@@ -30,13 +39,28 @@ export default function ShortsLounge() {
   const [index, setIndex] = useState(loadSavedIndex);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [muted, setMuted] = useState(true);
+  const [muted, setMuted] = useState(loadSavedMuted);
   const [playerReady, setPlayerReady] = useState(false);
   const playerRef = useRef(null);
   const nodeRef = useRef(null);
   const wheelLockRef = useRef(false);
+  const mutedRef = useRef(muted);
+  const feedLengthRef = useRef(feed.length);
 
   const current = feed[index] || null;
+
+  useEffect(() => {
+    mutedRef.current = muted;
+    try {
+      window.sessionStorage.setItem("tienlen.shorts.muted", muted ? "1" : "0");
+    } catch (e) {
+      // no-op
+    }
+  }, [muted]);
+
+  useEffect(() => {
+    feedLengthRef.current = feed.length;
+  }, [feed.length]);
 
   useEffect(() => {
     if (window.YT && window.YT.Player) {
@@ -73,11 +97,24 @@ export default function ShortsLounge() {
       },
       events: {
         onReady: event => {
-          event.target.mute();
+          if (mutedRef.current) event.target.mute();
+          else event.target.unMute();
         },
         onStateChange: event => {
           if (window.YT && event.data === window.YT.PlayerState.ENDED) {
-            next();
+            if (feedLengthRef.current > 1) {
+              setIndex(currentIndex =>
+                (currentIndex + 1) % feedLengthRef.current
+              );
+            }
+          }
+          if (window.YT && event.data === window.YT.PlayerState.PLAYING) {
+            try {
+              if (mutedRef.current) event.target.mute();
+              else event.target.unMute();
+            } catch (e) {
+              // no-op
+            }
           }
         },
       },
@@ -99,7 +136,7 @@ export default function ShortsLounge() {
     if (!playerRef.current || !current || !current.videoId) return;
     try {
       playerRef.current.loadVideoById(current.videoId);
-      if (muted) playerRef.current.mute();
+      if (mutedRef.current) playerRef.current.mute();
       else playerRef.current.unMute();
     } catch (e) {
       // player may still be initializing
@@ -160,13 +197,17 @@ export default function ShortsLounge() {
 
   const onWheel = event => {
     if (!open || feed.length < 2 || wheelLockRef.current) return;
-    if (Math.abs(event.deltaY) < 20) return;
+    if (Math.abs(event.deltaY) < 10) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
     wheelLockRef.current = true;
     if (event.deltaY > 0) next();
     else previous();
-    setTimeout(() => {
+    window.setTimeout(() => {
       wheelLockRef.current = false;
-    }, 450);
+    }, 350);
   };
 
   return (
@@ -222,7 +263,7 @@ export default function ShortsLounge() {
 
         {error && <div className="shorts-lounge__error">{error}</div>}
         <div className="shorts-lounge__hint">
-          Cuộn chuột lên/xuống để đổi clip. Hết video sẽ tự sang clip tiếp theo.
+          Cuộn lên/xuống ngay trên video để đổi clip. Hết video sẽ tự sang clip tiếp theo.
         </div>
       </div>
     </div>
