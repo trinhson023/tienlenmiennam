@@ -82,6 +82,43 @@
   box-shadow: none !important;
 }
 
+/* 60s authoritative turn timer */
+.premium-hud__timer {
+  min-width: 86px;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.premium-hud__timer strong {
+  font-variant-numeric: tabular-nums;
+  min-width: 34px;
+  text-align: center;
+}
+
+.premium-hud__timer.is-urgent {
+  border-color: rgba(251, 191, 36, 0.55) !important;
+  background: rgba(120, 68, 5, 0.22) !important;
+}
+
+.premium-hud__timer.is-urgent strong {
+  color: #fcd34d !important;
+}
+
+.premium-hud__timer.is-critical {
+  border-color: rgba(248, 113, 113, 0.78) !important;
+  background: rgba(127, 29, 29, 0.28) !important;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.18) !important;
+  animation: turnTimerCritical 0.8s ease-in-out infinite alternate;
+}
+
+.premium-hud__timer.is-critical strong {
+  color: #fecaca !important;
+}
+
+@keyframes turnTimerCritical {
+  from { transform: scale(1); }
+  to { transform: scale(1.035); }
+}
+
 @keyframes cardFlyFromTop {
   0% { opacity: 0; transform: translateY(-120px) scale(0.78) rotate(-8deg); }
   65% { opacity: 1; transform: translateY(6px) scale(1.03) rotate(2deg); }
@@ -167,7 +204,8 @@
   .game-event__shock,
   .premium-center-cards .card,
   .premium-control-staging .card,
-  .current-player-status.premium-player-card {
+  .current-player-status.premium-player-card,
+  .premium-hud__timer.is-critical {
     animation: none !important;
   }
 }
