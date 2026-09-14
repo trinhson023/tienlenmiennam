@@ -63,9 +63,33 @@ public sealed class PersistentMatchStore(IDbContextFactory<TienLenDbContext> dbF
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var record = await db.Matches.SingleAsync(x => x.Id == runtime.Match.Id.Value, ct);
-        Apply(record, runtime, DateTimeOffset.UtcNow);
+        var completedNow = record.Status != (int)MatchStatus.Completed && runtime.Match.Status == MatchStatus.Completed;
+        var now = DateTimeOffset.UtcNow;
+        Apply(record, runtime, now);
+        if (completedNow)
+            db.Outbox.Add(BuildMatchCompletedOutbox(runtime, now));
         await db.SaveChangesAsync(ct);
         _cache[runtime.Match.Id.Value] = runtime;
+    }
+
+    private static TienLenOutboxRecord BuildMatchCompletedOutbox(MatchRuntime runtime, DateTimeOffset now)
+    {
+        var eventId = Guid.NewGuid();
+        var matchPlayers = runtime.Match.Players.ToDictionary(x => x.Id.Value);
+        var players = runtime.Players.Values.OrderBy(x => x.SeatNumber).Select(identity =>
+        {
+            var player = matchPlayers[identity.UserId];
+            return new OutboxMatchCompletedPlayer(identity.UserId, identity.Username, identity.DisplayName, identity.SeatNumber, identity.IsBot, player.FinishPosition ?? 0);
+        }).ToArray();
+        var payload = new OutboxMatchCompleted(eventId, runtime.Match.Id.Value, runtime.RoomId, "tien-len", runtime.CompletedAtUtc ?? now, players);
+        return new TienLenOutboxRecord
+        {
+            Id = eventId,
+            MatchId = runtime.Match.Id.Value,
+            EventType = "MatchCompleted",
+            PayloadJson = JsonSerializer.Serialize(payload, JsonOptions),
+            CreatedAtUtc = now
+        };
     }
 
     private static TienLenMatchRecord ToRecord(MatchRuntime runtime, DateTimeOffset now)
@@ -92,16 +116,10 @@ public sealed class PersistentMatchStore(IDbContextFactory<TienLenDbContext> dbF
         var envelope = JsonSerializer.Deserialize<PersistedEnvelope>(record.SnapshotJson, JsonOptions)
             ?? throw new InvalidOperationException($"Cannot deserialize Tiến Lên match {record.Id}.");
         var match = TienLenMatch.Restore(envelope.Match);
-        return new MatchRuntime(
-            record.RoomId,
-            match,
-            envelope.Players,
-            record.Version,
-            record.TurnDeadlineUtc,
-            record.BotActionDueUtc,
-            record.CreatedAtUtc,
-            record.CompletedAtUtc);
+        return new MatchRuntime(record.RoomId, match, envelope.Players, record.Version, record.TurnDeadlineUtc, record.BotActionDueUtc, record.CreatedAtUtc, record.CompletedAtUtc);
     }
 
     private sealed record PersistedEnvelope(TienLenMatchSnapshot Match, MatchPlayerIdentity[] Players);
+    private sealed record OutboxMatchCompleted(Guid EventId, Guid MatchId, Guid RoomId, string GameSlug, DateTimeOffset CompletedAtUtc, OutboxMatchCompletedPlayer[] Players);
+    private sealed record OutboxMatchCompletedPlayer(Guid UserId, string Username, string DisplayName, int SeatNumber, bool IsBot, int FinishPosition);
 }

@@ -27,7 +27,7 @@
 - M5 — Tiến Lên application + realtime vertical slice ✅
 - M6 — Timer, bot, reconnect, persistence ✅
 - M7 — Vue gameplay migration ✅
-- M8 — Shared Social + Media + Stats ⏭️
+- M8 — Shared Social + Media + Stats ⏳ Phase 3 acceptance
 - M9 — Sâm Lốc service
 - M10 — Cờ Tướng service (optional for first V3 merge)
 - M11 — Hardening
@@ -35,45 +35,31 @@
 
 ## M7 — Vue gameplay migration — CLOSED
 
-Final scope completed on `feat/dotnet-vue-microservices`:
-- premium Vue gameplay table for 2–4 players
-- SVG card assets and responsive hand/center rendering
-- server-authoritative timer HUD
-- bot seats / turn presentation
-- staging, sorting and selection controls
-- card/chop VFX + WebAudio SFX
-- Quick Chat / custom taunts
-- throwable reactions
-- same-room rematch using a new Match under the same Room
-- completed-match return-to-lobby lifecycle
-- `LastCompletedMatchId` room semantics
-- account-level social throttle within a service instance
-- room lifecycle serialization within a service instance
-- no center-card replay animation on initial load/reconnect
-- reduced-motion accessibility behavior
-
-M7 final acceptance baseline is the latest commit after the final polish pass. Phase 2 concurrency acceptance baseline before polish: `891aa33a76bdf19f4c13f8b674f7058e47d7f363`.
+Final scope completed on `feat/dotnet-vue-microservices`: premium Vue gameplay table, SVG cards, authoritative timer, bots, selection/sorting, VFX/SFX, social parity, same-room rematch, return-to-lobby lifecycle and recovery polish.
 
 ## M8 — Shared Social + Media + Stats
 
-SocialService:
-- move shared room social concerns out of game-specific runtime where appropriate
-- room text chat
-- quick taunts
-- bomb/tomato/poop reactions
-- cooldown / anti-spam
+Phase 1 — Shared SocialService ✅ CLOSED (`1939cd6340ad8f1f616fc37d7544c580951fbdea`)
+- room chat / quick taunts / reactions
 - SignalR `/hubs/social`
+- room-authoritative sender + receiver authorization
+- persistent history added in Phase 2
 
-MediaService:
-- YouTube search proxy
-- room music queue/state
-- Shorts search/state
-- media state belongs to Room, not Match
+Phase 2 — Persistent Social + MediaService ✅ CLOSED (`0ee0ede7180a1f366dee0b5188bd5704f7e9b2a3`)
+- PostgreSQL social history with 50-message retention
+- YouTube server-side search proxy with room-scoped quota protection
+- room-owned Music state / queue / seek / playback recovery
+- Shorts Lounge
+- persistent Media state across restart/rematch
 
-StatisticsService:
-- consumes `MatchCompleted` via RabbitMQ/MassTransit
-- games played / wins / losses / win rate
-- per-game rating-ready schema
+Phase 3 — StatisticsService ⏳ acceptance
+- Tiến Lên writes `MatchCompleted` into a transactional DB outbox on the same save that marks the match Completed
+- MassTransit publishes the outbox to RabbitMQ
+- StatisticsService consumes `MatchCompleted` idempotently using `processed_matches`
+- human-only games/wins/losses/win-rate aggregation; bots do not get player stats
+- rating-ready per-game schema (`Rating` starts at 1000; no rating algorithm yet)
+- authenticated self stats / user stats / leaderboard endpoints
+- compact lobby Stats dock
 
 ## M9 — Sâm Lốc service
 
@@ -103,8 +89,8 @@ First release target: PvP before AI.
 
 ## M11 — Hardening
 
-- idempotent event handling
-- outbox/inbox if event reliability requires it
+- idempotent event handling ✅ introduced for Statistics `MatchCompleted`
+- outbox/inbox if event reliability requires it ✅ producer outbox introduced for Tiến Lên stats events
 - structured Serilog logs
 - correlation IDs
 - health/readiness checks
@@ -114,7 +100,7 @@ First release target: PvP before AI.
 - database migrations in CI/CD
 - integration tests with Testcontainers
 - WebSocket proxy tests through Ocelot
-- replace single-instance room lifecycle locking with DB/distributed coordination before horizontal scale
+- replace single-instance room/media lifecycle locking with DB/distributed coordination before horizontal scale
 - replace in-memory social throttle with a distributed limiter before horizontal scale
 
 ## M12 — CI/CD and release readiness
@@ -144,10 +130,10 @@ The V3 branch cannot replace the current app until all critical items below pass
 - [x] reconnect/recovery
 - [x] same-room rematch
 - [x] Social reactions/quick chat parity for Tiến Lên
-- [ ] Music Room
-- [ ] Shorts Lounge
+- [x] Music Room
+- [x] Shorts Lounge
 - [x] persistent Tiến Lên match history/state
-- [ ] stats
+- [ ] stats (Phase 3 runtime acceptance pending)
 - [x] Docker Compose core stack
 - [x] core Tiến Lên unit/integration tests green
 - [ ] Sâm playable end-to-end
