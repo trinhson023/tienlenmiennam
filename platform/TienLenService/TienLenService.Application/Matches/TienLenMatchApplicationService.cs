@@ -1,12 +1,17 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using TienLenService.Domain.Cards;
 using TienLenService.Domain.Matches;
 
 namespace TienLenService.Application.Matches;
 
-public sealed class TienLenMatchApplicationService(IMatchStore store)
+public sealed class TienLenMatchApplicationService(
+    IMatchStore store,
+    MatchRuntimeSettings settings)
 {
-    public CreateMatchResult CreateMatch(CreateMatchRequest request)
+    private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _roomCreationGates = new();
+
+    public async Task<CreateMatchResult> CreateMatchAsync(CreateMatchRequest request, CancellationToken ct)
     {
         if (request.RoomId == Guid.Empty) return CreateMatchResult.Failure("invalid_room", "RoomId không hợp lệ.");
         if (request.Players is null || request.Players.Count is < 2 or > 4)
@@ -16,46 +21,62 @@ public sealed class TienLenMatchApplicationService(IMatchStore store)
         if (request.Players.Select(x => x.SeatNumber).Distinct().Count() != request.Players.Count || request.Players.Any(x => x.SeatNumber is < 0 or > 3))
             return CreateMatchResult.Failure("invalid_seat", "Ghế người chơi không hợp lệ.");
 
-        var existing = store.GetLatestByRoom(request.RoomId);
-        if (existing is not null && existing.Match.Status == MatchStatus.InProgress)
-            return CreateMatchResult.Success(existing.Match.Id.Value);
+        var gate = _roomCreationGates.GetOrAdd(request.RoomId, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            var existing = await store.GetLatestByRoomAsync(request.RoomId, ct);
+            if (existing is not null && existing.Match.Status == MatchStatus.InProgress)
+                return CreateMatchResult.Success(existing.Match.Id.Value);
 
-        var deck = DeckFactory.CreateStandardDeck().ToArray();
-        Shuffle(deck);
-        var orderedPlayers = request.Players.OrderBy(x => x.SeatNumber).ToArray();
-        var hands = DeckFactory.DealChunked(deck, orderedPlayers.Length);
-        var setups = orderedPlayers.Select((player, index) =>
-            new PlayerSetup(new PlayerId(player.UserId), new SeatNumber(player.SeatNumber), hands[index])).ToArray();
+            var deck = DeckFactory.CreateStandardDeck().ToArray();
+            Shuffle(deck);
+            var orderedPlayers = request.Players.OrderBy(x => x.SeatNumber).ToArray();
+            var hands = DeckFactory.DealChunked(deck, orderedPlayers.Length);
+            var setups = orderedPlayers.Select((player, index) =>
+                new PlayerSetup(new PlayerId(player.UserId), new SeatNumber(player.SeatNumber), hands[index])).ToArray();
 
-        var match = TienLenMatch.Create(MatchId.New(), setups);
-        var identities = orderedPlayers.Select(x => new MatchPlayerIdentity(x.UserId, x.SeatNumber, x.Username, x.DisplayName)).ToArray();
-        var runtime = new MatchRuntime(request.RoomId, match, identities);
-        if (!store.TryAdd(runtime)) return CreateMatchResult.Failure("match_conflict", "Không thể tạo match mới.");
-        return CreateMatchResult.Success(match.Id.Value);
+            var now = DateTimeOffset.UtcNow;
+            var match = TienLenMatch.Create(MatchId.New(), setups);
+            var identities = orderedPlayers.Select(x => new MatchPlayerIdentity(x.UserId, x.SeatNumber, x.Username, x.DisplayName, x.IsBot)).ToArray();
+            var runtime = new MatchRuntime(request.RoomId, match, identities, createdAtUtc: now);
+            ScheduleTurn(runtime, now);
+            if (!await store.TryAddAsync(runtime, ct)) return CreateMatchResult.Failure("match_conflict", "Không thể tạo match mới.");
+            return CreateMatchResult.Success(match.Id.Value);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
-    public MatchCommandResult GetState(Guid matchId, Guid userId)
+    public async Task<MatchCommandResult> GetStateAsync(Guid matchId, Guid userId, CancellationToken ct)
     {
-        var runtime = store.Get(matchId);
+        var runtime = await store.GetAsync(matchId, ct);
         if (runtime is null) return MatchCommandResult.Failure("match_not_found", "Không tìm thấy ván chơi.");
-        lock (runtime.SyncRoot)
+        await runtime.Gate.WaitAsync(ct);
+        try
         {
             if (!runtime.Players.ContainsKey(userId)) return MatchCommandResult.Failure("not_match_player", "Bạn không thuộc ván này.");
             return MatchCommandResult.Success(Project(runtime, userId));
         }
+        finally { runtime.Gate.Release(); }
     }
 
-    public IReadOnlyList<Guid> GetParticipantIds(Guid matchId)
+    public async Task<IReadOnlyList<Guid>> GetParticipantIdsAsync(Guid matchId, CancellationToken ct)
     {
-        var runtime = store.Get(matchId);
+        var runtime = await store.GetAsync(matchId, ct);
         return runtime is null ? [] : runtime.Players.Keys.ToArray();
     }
 
-    public MatchCommandResult PlayCards(Guid matchId, Guid userId, IReadOnlyCollection<string>? cardCodes, long expectedVersion)
+    public Task<IReadOnlyList<Guid>> GetActiveMatchIdsAsync(CancellationToken ct) => store.GetActiveMatchIdsAsync(ct);
+
+    public async Task<MatchCommandResult> PlayCardsAsync(Guid matchId, Guid userId, IReadOnlyCollection<string>? cardCodes, long expectedVersion, CancellationToken ct)
     {
-        var runtime = store.Get(matchId);
+        var runtime = await store.GetAsync(matchId, ct);
         if (runtime is null) return MatchCommandResult.Failure("match_not_found", "Không tìm thấy ván chơi.");
-        lock (runtime.SyncRoot)
+        await runtime.Gate.WaitAsync(ct);
+        try
         {
             if (!runtime.Players.ContainsKey(userId)) return MatchCommandResult.Failure("not_match_player", "Bạn không thuộc ván này.");
             if (expectedVersion != runtime.Version) return MatchCommandResult.Failure("stale_state", "State của client đã cũ, hãy đồng bộ lại.");
@@ -70,23 +91,94 @@ public sealed class TienLenMatchApplicationService(IMatchStore store)
 
             var result = runtime.Match.PlayCards(new PlayerId(userId), cards);
             if (!result.IsSuccess) return MatchCommandResult.Failure(result.ValidationCode?.ToString() ?? result.Error.ToString(), result.Message ?? "Nước đánh không hợp lệ.");
-            runtime.Version++;
+            await CommitActionAsync(runtime, DateTimeOffset.UtcNow, ct);
             return MatchCommandResult.Success(Project(runtime, userId));
         }
+        finally { runtime.Gate.Release(); }
     }
 
-    public MatchCommandResult Pass(Guid matchId, Guid userId, long expectedVersion)
+    public async Task<MatchCommandResult> PassAsync(Guid matchId, Guid userId, long expectedVersion, CancellationToken ct)
     {
-        var runtime = store.Get(matchId);
+        var runtime = await store.GetAsync(matchId, ct);
         if (runtime is null) return MatchCommandResult.Failure("match_not_found", "Không tìm thấy ván chơi.");
-        lock (runtime.SyncRoot)
+        await runtime.Gate.WaitAsync(ct);
+        try
         {
             if (!runtime.Players.ContainsKey(userId)) return MatchCommandResult.Failure("not_match_player", "Bạn không thuộc ván này.");
             if (expectedVersion != runtime.Version) return MatchCommandResult.Failure("stale_state", "State của client đã cũ, hãy đồng bộ lại.");
             var result = runtime.Match.Pass(new PlayerId(userId));
             if (!result.IsSuccess) return MatchCommandResult.Failure(result.Error.ToString(), result.Message ?? "Không thể bỏ lượt.");
-            runtime.Version++;
+            await CommitActionAsync(runtime, DateTimeOffset.UtcNow, ct);
             return MatchCommandResult.Success(Project(runtime, userId));
+        }
+        finally { runtime.Gate.Release(); }
+    }
+
+    public async Task<bool> ProcessAutomationAsync(Guid matchId, DateTimeOffset now, CancellationToken ct)
+    {
+        var runtime = await store.GetAsync(matchId, ct);
+        if (runtime is null) return false;
+        await runtime.Gate.WaitAsync(ct);
+        try
+        {
+            if (runtime.Match.Status == MatchStatus.Completed || runtime.Match.CurrentPlayerId is null) return false;
+            var currentId = runtime.Match.CurrentPlayerId.Value.Value;
+            if (!runtime.Players.TryGetValue(currentId, out var identity)) return false;
+
+            var botDue = identity.IsBot && runtime.BotActionDueUtc.HasValue && runtime.BotActionDueUtc.Value <= now;
+            var timeoutDue = runtime.TurnDeadlineUtc.HasValue && runtime.TurnDeadlineUtc.Value <= now;
+            if (!botDue && !timeoutDue) return false;
+
+            var player = runtime.Match.Players.Single(x => x.Id.Value == currentId);
+            var legal = LegalMoveGenerator.FindLowestLegalPlay(runtime.Match, player);
+            MatchActionResult action;
+
+            if (runtime.Match.Center.Count == 0)
+            {
+                if (legal is null) return false;
+                action = runtime.Match.PlayCards(player.Id, legal);
+            }
+            else if (identity.IsBot && legal is not null)
+            {
+                action = runtime.Match.PlayCards(player.Id, legal);
+            }
+            else
+            {
+                action = runtime.Match.Pass(player.Id);
+            }
+
+            if (!action.IsSuccess) return false;
+            await CommitActionAsync(runtime, now, ct);
+            return true;
+        }
+        finally { runtime.Gate.Release(); }
+    }
+
+    private async Task CommitActionAsync(MatchRuntime runtime, DateTimeOffset now, CancellationToken ct)
+    {
+        runtime.Version++;
+        if (runtime.Match.Status == MatchStatus.Completed)
+        {
+            runtime.CompletedAtUtc ??= now;
+            runtime.TurnDeadlineUtc = null;
+            runtime.BotActionDueUtc = null;
+        }
+        else
+        {
+            ScheduleTurn(runtime, now);
+        }
+        await store.SaveAsync(runtime, ct);
+    }
+
+    private void ScheduleTurn(MatchRuntime runtime, DateTimeOffset now)
+    {
+        runtime.TurnDeadlineUtc = now.AddSeconds(settings.TurnSeconds);
+        runtime.BotActionDueUtc = null;
+        var current = runtime.Match.CurrentPlayerId?.Value;
+        if (current.HasValue && runtime.Players.TryGetValue(current.Value, out var identity) && identity.IsBot)
+        {
+            var maxExclusive = Math.Max(settings.BotMinDelayMs + 1, settings.BotMaxDelayMs + 1);
+            runtime.BotActionDueUtc = now.AddMilliseconds(Random.Shared.Next(settings.BotMinDelayMs, maxExclusive));
         }
     }
 
@@ -104,16 +196,21 @@ public sealed class TienLenMatchApplicationService(IMatchStore store)
                 player.Hand.Count,
                 player.HasFinished,
                 player.FinishPosition,
-                player.Id.Value == viewerUserId);
+                player.Id.Value == viewerUserId,
+                identity.IsBot);
         }).ToArray();
 
         var ownPlayer = match.Players.Single(x => x.Id.Value == viewerUserId);
+        var currentId = match.CurrentPlayerId?.Value;
+        var currentIsBot = currentId.HasValue && runtime.Players.TryGetValue(currentId.Value, out var currentIdentity) && currentIdentity.IsBot;
         return new MatchStateView(
             match.Id.Value,
             runtime.RoomId,
             runtime.Version,
             match.Status.ToString(),
-            match.CurrentPlayerId?.Value,
+            currentId,
+            currentIsBot,
+            runtime.TurnDeadlineUtc,
             match.IsOpeningPlay,
             match.CenterType?.ToString(),
             match.Center.Select(x => x.Code).ToArray(),

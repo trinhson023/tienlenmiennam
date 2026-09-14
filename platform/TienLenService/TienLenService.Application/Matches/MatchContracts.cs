@@ -1,6 +1,6 @@
 namespace TienLenService.Application.Matches;
 
-public sealed record MatchPlayerSeed(Guid UserId, int SeatNumber, string Username, string DisplayName);
+public sealed record MatchPlayerSeed(Guid UserId, int SeatNumber, string Username, string DisplayName, bool IsBot = false);
 public sealed record CreateMatchRequest(Guid RoomId, IReadOnlyList<MatchPlayerSeed> Players);
 public sealed record CreateMatchResult(bool IsSuccess, Guid? MatchId, string? ErrorCode, string? ErrorMessage)
 {
@@ -16,7 +16,8 @@ public sealed record MatchPlayerView(
     int CardCount,
     bool HasFinished,
     int? FinishPosition,
-    bool IsSelf);
+    bool IsSelf,
+    bool IsBot);
 
 public sealed record MatchStateView(
     Guid MatchId,
@@ -24,6 +25,8 @@ public sealed record MatchStateView(
     long Version,
     string Status,
     Guid? CurrentPlayerUserId,
+    bool CurrentPlayerIsBot,
+    DateTimeOffset? TurnDeadlineUtc,
     bool IsOpeningPlay,
     string? CenterType,
     IReadOnlyList<string> Center,

@@ -6,45 +6,32 @@ using TienLenService.Application.Matches;
 namespace TienLenService.Api.Hubs;
 
 [Authorize]
-public sealed class TienLenHub(TienLenMatchApplicationService matches) : Hub
+public sealed class TienLenHub(TienLenMatchApplicationService matches, MatchBroadcaster broadcaster) : Hub
 {
-    public async Task JoinMatch(Guid matchId)
+    public async Task JoinMatch(Guid matchId, CancellationToken ct)
     {
         var userId = GetUserId();
-        var state = matches.GetState(matchId, userId);
+        var state = await matches.GetStateAsync(matchId, userId, ct);
         if (!state.IsSuccess || state.State is null) throw new HubException(state.ErrorMessage ?? "Không vào được ván.");
-        await Groups.AddToGroupAsync(Context.ConnectionId, UserGroup(matchId, userId));
-        await Clients.Caller.SendAsync("MatchStateUpdated", state.State);
+        await Groups.AddToGroupAsync(Context.ConnectionId, MatchBroadcaster.UserGroup(matchId, userId), ct);
+        await Clients.Caller.SendAsync("MatchStateUpdated", state.State, ct);
     }
 
-    public Task LeaveMatch(Guid matchId)
-    {
-        var userId = GetUserId();
-        return Groups.RemoveFromGroupAsync(Context.ConnectionId, UserGroup(matchId, userId));
-    }
+    public Task LeaveMatch(Guid matchId, CancellationToken ct) =>
+        Groups.RemoveFromGroupAsync(Context.ConnectionId, MatchBroadcaster.UserGroup(matchId, GetUserId()), ct);
 
-    public async Task PlayCards(Guid matchId, string[] cardCodes, long expectedVersion)
+    public async Task PlayCards(Guid matchId, string[] cardCodes, long expectedVersion, CancellationToken ct)
     {
-        var result = matches.PlayCards(matchId, GetUserId(), cardCodes, expectedVersion);
+        var result = await matches.PlayCardsAsync(matchId, GetUserId(), cardCodes, expectedVersion, ct);
         if (!result.IsSuccess) throw new HubException($"{result.ErrorCode}: {result.ErrorMessage}");
-        await BroadcastMatch(matchId);
+        await broadcaster.BroadcastMatchAsync(matchId, ct);
     }
 
-    public async Task Pass(Guid matchId, long expectedVersion)
+    public async Task Pass(Guid matchId, long expectedVersion, CancellationToken ct)
     {
-        var result = matches.Pass(matchId, GetUserId(), expectedVersion);
+        var result = await matches.PassAsync(matchId, GetUserId(), expectedVersion, ct);
         if (!result.IsSuccess) throw new HubException($"{result.ErrorCode}: {result.ErrorMessage}");
-        await BroadcastMatch(matchId);
-    }
-
-    private async Task BroadcastMatch(Guid matchId)
-    {
-        foreach (var userId in matches.GetParticipantIds(matchId))
-        {
-            var state = matches.GetState(matchId, userId);
-            if (state.IsSuccess && state.State is not null)
-                await Clients.Group(UserGroup(matchId, userId)).SendAsync("MatchStateUpdated", state.State);
-        }
+        await broadcaster.BroadcastMatchAsync(matchId, ct);
     }
 
     private Guid GetUserId()
@@ -53,6 +40,4 @@ public sealed class TienLenHub(TienLenMatchApplicationService matches) : Hub
         if (!Guid.TryParse(value, out var userId)) throw new HubException("Unauthorized user.");
         return userId;
     }
-
-    private static string UserGroup(Guid matchId, Guid userId) => $"match:{matchId}:user:{userId}";
 }

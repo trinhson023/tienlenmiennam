@@ -43,6 +43,53 @@ public sealed class TienLenMatch
         return new TienLenMatch(id, players);
     }
 
+    public TienLenMatchSnapshot CaptureSnapshot() => new(
+        Id.Value,
+        Status,
+        CurrentSeat?.Value,
+        IsOpeningPlay,
+        _center.Select(x => x.Code).ToArray(),
+        _winnerOrder.Select(x => x.Value).ToArray(),
+        _activeSeats.Select(x => x.Value).OrderBy(x => x).ToArray(),
+        _lastPlaySeat?.Value,
+        _players.Select(x => new MatchPlayerSnapshot(
+            x.Id.Value,
+            x.Seat.Value,
+            x.Hand.Select(card => card.Code).ToArray(),
+            x.FinishPosition)).ToArray());
+
+    public static TienLenMatch Restore(TienLenMatchSnapshot snapshot)
+    {
+        if (snapshot.Players.Count is < 2 or > 4) throw new InvalidOperationException("Persisted Tiến Lên match has invalid player count.");
+        var setups = snapshot.Players.Select(x => new PlayerSetup(
+            new PlayerId(x.PlayerId),
+            new SeatNumber(x.SeatNumber),
+            x.Hand.Select(CardCode.Parse).ToArray())).ToArray();
+
+        var match = new TienLenMatch(new MatchId(snapshot.MatchId), setups)
+        {
+            Status = snapshot.Status,
+            CurrentSeat = snapshot.CurrentSeat.HasValue ? new SeatNumber(snapshot.CurrentSeat.Value) : null,
+            IsOpeningPlay = snapshot.IsOpeningPlay,
+            _lastPlaySeat = snapshot.LastPlaySeat.HasValue ? new SeatNumber(snapshot.LastPlaySeat.Value) : null
+        };
+
+        match._center.Clear();
+        match._center.AddRange(snapshot.Center.Select(CardCode.Parse));
+        match._winnerOrder.Clear();
+        match._winnerOrder.AddRange(snapshot.WinnerOrder.Select(x => new PlayerId(x)));
+        match._activeSeats.Clear();
+        foreach (var seat in snapshot.ActiveSeats) match._activeSeats.Add(new SeatNumber(seat));
+
+        foreach (var persisted in snapshot.Players)
+        {
+            if (!persisted.FinishPosition.HasValue) continue;
+            match.FindPlayer(new PlayerId(persisted.PlayerId))!.MarkFinished(persisted.FinishPosition.Value);
+        }
+
+        return match;
+    }
+
     public MatchActionResult PlayCards(PlayerId playerId, IReadOnlyCollection<Card>? cards)
     {
         var readiness = ValidateActor(playerId);

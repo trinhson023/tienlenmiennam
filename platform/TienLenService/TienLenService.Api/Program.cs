@@ -1,20 +1,29 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using TienLenService.Api;
 using TienLenService.Api.Hubs;
 using TienLenService.Application.Matches;
 using TienLenService.Domain.Cards;
 using TienLenService.Domain.Rules;
-using TienLenService.Infrastructure.Matches;
+using TienLenService.Infrastructure;
+using TienLenService.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddHealthChecks();
 builder.Services.AddSignalR();
 builder.Services.AddAuthorization();
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy.AllowAnyHeader().AllowAnyMethod().SetIsOriginAllowed(_ => true).AllowCredentials()));
-builder.Services.AddSingleton<IMatchStore, InMemoryMatchStore>();
-builder.Services.AddSingleton<TienLenMatchApplicationService>();
+
+var turnSeconds = int.TryParse(builder.Configuration["Match:TurnSeconds"], out var parsedTurn) ? parsedTurn : 60;
+var botMinDelay = int.TryParse(builder.Configuration["Match:BotMinDelayMs"], out var parsedBotMin) ? parsedBotMin : 800;
+var botMaxDelay = int.TryParse(builder.Configuration["Match:BotMaxDelayMs"], out var parsedBotMax) ? parsedBotMax : 1400;
+builder.Services.AddSingleton(new MatchRuntimeSettings(turnSeconds, botMinDelay, botMaxDelay));
+builder.Services.AddScoped<TienLenMatchApplicationService>();
+builder.Services.AddScoped<MatchBroadcaster>();
+builder.Services.AddHostedService<MatchAutomationWorker>();
 
 var jwt = builder.Configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings();
 if (jwt.Secret.Length < 32) throw new InvalidOperationException("Jwt:Secret must contain at least 32 characters.");
@@ -54,4 +63,12 @@ app.MapGet("/api/rules/smoke", () =>
     var pair = new[] { new Card(Rank.Seven, Suit.Spades), new Card(Rank.Seven, Suit.Hearts) };
     return Results.Ok(new { service = "TienLenService", detected = CombinationDetector.Detect(pair).ToString() });
 });
+
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<TienLenDbContext>>();
+    await using var db = await factory.CreateDbContextAsync();
+    await db.Database.MigrateAsync();
+}
+
 app.Run();

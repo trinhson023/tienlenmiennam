@@ -2,21 +2,37 @@ using TienLenService.Domain.Matches;
 
 namespace TienLenService.Application.Matches;
 
-public sealed record MatchPlayerIdentity(Guid UserId, int SeatNumber, string Username, string DisplayName);
+public sealed record MatchPlayerIdentity(Guid UserId, int SeatNumber, string Username, string DisplayName, bool IsBot);
 
 public sealed class MatchRuntime
 {
-    public MatchRuntime(Guid roomId, TienLenMatch match, IReadOnlyCollection<MatchPlayerIdentity> players)
+    public MatchRuntime(
+        Guid roomId,
+        TienLenMatch match,
+        IReadOnlyCollection<MatchPlayerIdentity> players,
+        long version = 1,
+        DateTimeOffset? turnDeadlineUtc = null,
+        DateTimeOffset? botActionDueUtc = null,
+        DateTimeOffset? createdAtUtc = null,
+        DateTimeOffset? completedAtUtc = null)
     {
         RoomId = roomId;
         Match = match;
         Players = players.ToDictionary(x => x.UserId);
-        Version = 1;
+        Version = version;
+        TurnDeadlineUtc = turnDeadlineUtc;
+        BotActionDueUtc = botActionDueUtc;
+        CreatedAtUtc = createdAtUtc ?? DateTimeOffset.UtcNow;
+        CompletedAtUtc = completedAtUtc;
     }
 
     public Guid RoomId { get; }
     public TienLenMatch Match { get; }
     public IReadOnlyDictionary<Guid, MatchPlayerIdentity> Players { get; }
     public long Version { get; set; }
-    public object SyncRoot { get; } = new();
+    public DateTimeOffset? TurnDeadlineUtc { get; set; }
+    public DateTimeOffset? BotActionDueUtc { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; }
+    public DateTimeOffset? CompletedAtUtc { get; set; }
+    public SemaphoreSlim Gate { get; } = new(1, 1);
 }
