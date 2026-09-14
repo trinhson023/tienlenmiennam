@@ -9,6 +9,20 @@ public static class LobbyEndpoints
 {
     public static IEndpointRouteBuilder MapLobbyEndpoints(this IEndpointRouteBuilder endpoints)
     {
+        endpoints.MapGet("/api/internal/rooms/{roomId:guid}/social-context", async (Guid roomId, HttpContext http, LobbyApplicationService service, IConfiguration configuration, CancellationToken ct) =>
+        {
+            if (!HasInternalKey(http, configuration)) return Results.Unauthorized();
+            var result = await service.GetRoomAsync(roomId, ct);
+            if (!result.IsSuccess || result.Value is null) return Results.NotFound(new { error = "room_not_found", message = "Không tìm thấy phòng." });
+            var room = result.Value;
+            return Results.Ok(new
+            {
+                id = room.Id,
+                status = room.Status,
+                members = room.Members.Select(x => new { x.UserId, x.Username, x.DisplayName, x.IsBot }).ToArray()
+            });
+        });
+
         var group = endpoints.MapGroup("/api").RequireAuthorization();
         group.MapGet("/games", async (LobbyApplicationService service, CancellationToken ct) => Results.Ok(await service.ListGamesAsync(ct)));
         group.MapGet("/rooms", async (string? game, LobbyApplicationService service, CancellationToken ct) => Results.Ok(await service.ListRoomsAsync(game, ct)));
@@ -30,6 +44,7 @@ public static class LobbyEndpoints
     private static Task BroadcastMatchStarted(IHubContext<LobbyHub> hub, Guid roomId, RoomDetails room, CancellationToken ct) => Task.WhenAll(hub.Clients.Group("lobby").SendAsync("RoomChanged", roomId, ct), hub.Clients.Group($"room:{roomId}").SendAsync("RoomUpdated", room, ct), hub.Clients.Group($"room:{roomId}").SendAsync("MatchStarted", room.ActiveMatchId, ct));
     private static PlayerIdentity? GetIdentity(ClaimsPrincipal principal) { var id = GetUserId(principal); var username = principal.FindFirstValue(ClaimTypes.Name); var displayName = principal.FindFirstValue("display_name") ?? username; return id.HasValue && !string.IsNullOrWhiteSpace(username) ? new PlayerIdentity(id.Value, username, displayName ?? username) : null; }
     private static Guid? GetUserId(ClaimsPrincipal principal) => Guid.TryParse(principal.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+    private static bool HasInternalKey(HttpContext http, IConfiguration configuration) { var expected = configuration["InternalApi:Key"] ?? "royal_game_internal_dev_key_change_me"; return http.Request.Headers.TryGetValue("X-Internal-Key", out var provided) && provided == expected; }
     private static IResult Map<T>(ServiceResult<T> result)
     {
         if (result.IsSuccess) return Results.Ok(result.Value);

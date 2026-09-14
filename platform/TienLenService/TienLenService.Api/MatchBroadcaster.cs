@@ -16,12 +16,6 @@ public sealed class MatchBroadcaster(IHubContext<TienLenHub> hub, TienLenMatchAp
         }
     }
 
-    public Task BroadcastQuickChatAsync(Guid matchId, MatchQuickChatEvent message, CancellationToken ct) =>
-        BroadcastPayloadAsync(matchId, "QuickChatReceived", message, ct);
-
-    public Task BroadcastThrowAsync(Guid matchId, MatchThrowEvent reaction, CancellationToken ct) =>
-        BroadcastPayloadAsync(matchId, "ThrowReactionReceived", reaction, ct);
-
     public Task BroadcastRematchAsync(Guid previousMatchId, Guid newMatchId, CancellationToken ct) =>
         BroadcastPayloadAsync(previousMatchId, "RematchStarted", newMatchId, ct);
 

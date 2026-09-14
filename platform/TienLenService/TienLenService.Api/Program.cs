@@ -13,8 +13,6 @@ using TienLenService.Infrastructure.Persistence;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddHealthChecks();
-builder.Services.AddMemoryCache();
-builder.Services.AddSingleton<SocialThrottle>();
 builder.Services.AddSignalR(options => { options.EnableDetailedErrors = builder.Environment.IsDevelopment(); });
 builder.Services.AddAuthorization();
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy.AllowAnyHeader().AllowAnyMethod().SetIsOriginAllowed(_ => true).AllowCredentials()));

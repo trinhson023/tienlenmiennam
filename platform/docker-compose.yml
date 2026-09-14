@@ -91,6 +91,22 @@ services:
     ports:
       - "5103:8080"
 
+  social-api:
+    build:
+      context: ./SocialService
+      dockerfile: SocialService.Api/Dockerfile
+    environment:
+      ASPNETCORE_URLS: http://+:8080
+      ASPNETCORE_ENVIRONMENT: Development
+      Jwt__Secret: ${JWT_SECRET:-CHANGE_ME_IN_REAL_ENVIRONMENT_MINIMUM_32_CHARS}
+      InternalApi__Key: ${INTERNAL_API_KEY:-royal_game_internal_dev_key_change_me}
+      LobbyService__BaseUrl: http://lobby-api:8080
+    depends_on:
+      lobby-api:
+        condition: service_started
+    ports:
+      - "5104:8080"
+
   api-gateway:
     build:
       context: ./ApiGateway
@@ -102,6 +118,7 @@ services:
       - identity-api
       - lobby-api
       - tienlen-api
+      - social-api
     ports:
       - "8888:8080"
 
