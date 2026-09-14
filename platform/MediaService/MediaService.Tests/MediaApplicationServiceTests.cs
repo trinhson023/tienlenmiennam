@@ -35,6 +35,16 @@ public sealed class MediaApplicationServiceTests
     }
 
     [Fact]
+    public async Task Search_IsRoomScoped_AndMusicSearchIsHostOnly()
+    {
+        var service = Create();
+        Assert.True((await service.SearchAsync(RoomId, Host, "remix", false, CancellationToken.None)).IsSuccess);
+        Assert.Equal("host_only", (await service.SearchAsync(RoomId, Guest, "remix", false, CancellationToken.None)).ErrorCode);
+        Assert.True((await service.SearchAsync(RoomId, Guest, "meme", true, CancellationToken.None)).IsSuccess);
+        Assert.Equal("not_in_room", (await service.SearchAsync(RoomId, Guid.NewGuid(), "meme", true, CancellationToken.None)).ErrorCode);
+    }
+
+    [Fact]
     public async Task ConcurrentHostQueueMutations_AreSerialized()
     {
         var store = new Store(saveDelayMs: 25);
