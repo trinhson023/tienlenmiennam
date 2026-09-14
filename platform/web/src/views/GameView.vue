@@ -3,522 +3,78 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PlayerSeat from '@/components/game/PlayerSeat.vue'
 import PlayingCard from '@/components/game/PlayingCard.vue'
+import QuickChat from '@/components/game/QuickChat.vue'
+import { api } from '@/core/http/api'
+import { isLegacyChop } from '@/core/game/clientRules'
+import { getSoundEnabled, playCardSound, playChatSound, playChopSound, playTurnSound, playVictorySound, setSoundEnabled } from '@/core/game/soundEffects'
 import { useAuthStore } from '@/stores/auth'
 import { useTienLenStore, type MatchPlayerView } from '@/stores/tienlen'
-import {
-  getSoundEnabled,
-  playCardSound,
-  playTurnSound,
-  playVictorySound,
-  setSoundEnabled
-} from '@/core/game/soundEffects'
 
-const route = useRoute()
-const router = useRouter()
-const auth = useAuthStore()
-const game = useTienLenStore()
-const matchId = String(route.params.matchId)
-
-const selected = ref<string[]>([])
-const localError = ref('')
-const secondsLeft = ref<number | null>(null)
-const turnBudgetMs = ref(60_000)
-const timerProgress = ref(1)
-const soundEnabled = ref(getSoundEnabled())
-const sortMode = ref<'rank' | 'suit'>('rank')
-const eventFx = ref<{ kind: 'play' | 'turn' | 'victory'; label: string; key: number } | null>(null)
-const effectsArmed = ref(false)
-const lastCenterSignature = ref('')
-const lastTurn = ref<string | null>(null)
-const lastStatus = ref('')
-let timerInterval: number | null = null
-let eventTimer: number | null = null
+const route = useRoute(); const router = useRouter(); const auth = useAuthStore(); const game = useTienLenStore()
+const matchId = computed(() => String(route.params.matchId))
+const selected = ref<string[]>([]); const localError = ref(''); const secondsLeft = ref<number | null>(null); const turnBudgetMs = ref(60_000); const timerProgress = ref(1); const soundEnabled = ref(getSoundEnabled()); const sortMode = ref<'rank' | 'suit'>('rank')
+const eventFx = ref<{ kind: 'play' | 'chop' | 'turn' | 'victory'; label: string; key: number } | null>(null)
+const effectsArmed = ref(false); const lastCenterSignature = ref(''); const lastCenterCards = ref<string[]>([]); const lastTurn = ref<string | null>(null); const lastStatus = ref(''); const rematchBusy = ref(false)
+let timerInterval: number | null = null; let eventTimer: number | null = null
 
 const isMyTurn = computed(() => !!game.match && game.match.currentPlayerUserId === auth.user?.id)
 const completed = computed(() => game.match?.status === 'Completed')
 const selfPlayer = computed(() => game.match?.players.find(x => x.isSelf || x.userId === auth.user?.id) || null)
-const centerLabel = computed(() => {
-  const type = game.match?.centerType
-  if (!type) return 'BÀN MỞ'
-  const labels: Record<string, string> = {
-    Single: 'BÀI LẺ', Pair: 'ĐÔI', Triple: 'SÁM', Straight: 'SẢNH',
-    FourOfAKind: 'TỨ QUÝ', ThreeConsecutivePairs: '3 ĐÔI THÔNG', FourConsecutivePairs: '4 ĐÔI THÔNG'
-  }
-  return labels[type] || type.toUpperCase()
-})
+const centerLabel = computed(() => { const type = game.match?.centerType; if (!type) return 'BÀN MỞ'; const labels: Record<string,string> = { Single:'BÀI LẺ', Pair:'ĐÔI', Triple:'SÁM', Straight:'SẢNH', FourOfAKind:'TỨ QUÝ', ThreeConsecutivePairs:'3 ĐÔI THÔNG', FourConsecutivePairs:'4 ĐÔI THÔNG' }; return labels[type] || type.toUpperCase() })
+const positionedOpponents = computed(() => { const match = game.match; if (!match) return [] as { player: MatchPlayerView; position:'top'|'left'|'right' }[]; const ordered=[...match.players].sort((a,b)=>a.seatNumber-b.seatNumber); const selfIndex=ordered.findIndex(x=>x.isSelf||x.userId===auth.user?.id); if(selfIndex<0)return[]; const result:{player:MatchPlayerView;position:'top'|'left'|'right'}[]=[]; for(let offset=1;offset<ordered.length;offset++){const player=ordered[(selfIndex+offset)%ordered.length];let position:'top'|'left'|'right'='top';if(ordered.length===4)position=offset===1?'right':offset===2?'top':'left';else if(ordered.length===3)position=offset===1?'right':'left';result.push({player,position})}return result })
+const rankOrder=['3','4','5','6','7','8','9','T','J','Q','K','A','2']; const suitOrder=['S','C','D','H']; const cardParts=(card:string)=>({rank:card.slice(0,-1),suit:card.slice(-1)})
+const sortedHand=computed(()=>[...(game.match?.hand||[])].sort((left,right)=>{const a=cardParts(left),b=cardParts(right),rankDiff=rankOrder.indexOf(a.rank)-rankOrder.indexOf(b.rank),suitDiff=suitOrder.indexOf(a.suit)-suitOrder.indexOf(b.suit);return sortMode.value==='rank'?rankDiff||suitDiff:suitDiff||rankDiff}))
+const selectedCards=computed(()=>selected.value.filter(card=>game.match?.hand.includes(card)))
+const timerRingStyle=computed<Record<string,string>>(()=>({background:`conic-gradient(#f4d06f ${Math.round(timerProgress.value*360)}deg, rgba(255,255,255,.08) 0deg)`}))
+const timerDanger=computed(()=>secondsLeft.value!==null&&secondsLeft.value<=10)
+const latestChatFor=(userId:string)=>[...game.chatEvents].reverse().find(event=>event.senderUserId===userId)?.text||null
+const reactionFor=(userId:string)=>game.latestThrow?.targetUserId===userId?game.latestThrow.emoji:null
 
-const positionedOpponents = computed(() => {
-  const match = game.match
-  if (!match) return [] as { player: MatchPlayerView; position: 'top' | 'left' | 'right' }[]
-  const ordered = [...match.players].sort((a, b) => a.seatNumber - b.seatNumber)
-  const selfIndex = ordered.findIndex(x => x.isSelf || x.userId === auth.user?.id)
-  if (selfIndex < 0) return []
-  const result: { player: MatchPlayerView; position: 'top' | 'left' | 'right' }[] = []
-  for (let offset = 1; offset < ordered.length; offset++) {
-    const player = ordered[(selfIndex + offset) % ordered.length]
-    let position: 'top' | 'left' | 'right' = 'top'
-    if (ordered.length === 4) position = offset === 1 ? 'right' : offset === 2 ? 'top' : 'left'
-    else if (ordered.length === 3) position = offset === 1 ? 'right' : 'left'
-    result.push({ player, position })
-  }
-  return result
-})
+function updateCountdown(){if(!game.match?.turnDeadlineUtc||completed.value){secondsLeft.value=null;timerProgress.value=0;return}const diff=Math.max(0,new Date(game.match.turnDeadlineUtc).getTime()-Date.now());secondsLeft.value=Math.ceil(diff/1000);timerProgress.value=Math.max(0,Math.min(1,diff/Math.max(1000,turnBudgetMs.value)))}
+function showEffect(kind:'play'|'chop'|'turn'|'victory',label:string,duration=700){if(eventTimer!==null)window.clearTimeout(eventTimer);eventFx.value={kind,label,key:Date.now()};eventTimer=window.setTimeout(()=>{eventFx.value=null},duration)}
+function syncEffectBaseline(){if(!game.match)return;lastCenterSignature.value=game.match.center.join('|');lastCenterCards.value=[...game.match.center];lastTurn.value=game.match.currentPlayerUserId;lastStatus.value=game.match.status}
+function toggleSound(){soundEnabled.value=setSoundEnabled(!soundEnabled.value)}
+function toggle(card:string){if(completed.value)return;selected.value=selected.value.includes(card)?selected.value.filter(x=>x!==card):[...selected.value,card]}
+function clearSelection(){selected.value=[]} function toggleSort(){sortMode.value=sortMode.value==='rank'?'suit':'rank'}
+async function play(){localError.value='';try{await game.playCards(selectedCards.value);selected.value=[]}catch{localError.value=game.error||'Nước đánh không hợp lệ.'}}
+async function pass(){localError.value='';try{await game.passTurn();selected.value=[]}catch{localError.value=game.error||'Không bỏ lượt được.'}}
+async function requestRematch(){if(!game.match||rematchBusy.value)return;rematchBusy.value=true;localError.value='';try{const{data}=await api.post<{activeMatchId:string|null}>(`/api/lobby/rooms/${game.match.roomId}/rematch`);if(data.activeMatchId&&data.activeMatchId!==matchId.value)await router.replace(`/games/tien-len/${data.activeMatchId}`)}catch(e){localError.value=e instanceof Error?e.message:'Không thể đánh lại.'}finally{rematchBusy.value=false}}
+async function loadMatch(id:string){effectsArmed.value=false;selected.value=[];localError.value='';await game.initialize(id);syncEffectBaseline();effectsArmed.value=true;updateCountdown()}
 
-const rankOrder = ['3','4','5','6','7','8','9','T','J','Q','K','A','2']
-const suitOrder = ['S','C','D','H']
-function cardParts(card: string) { return { rank: card.slice(0, -1), suit: card.slice(-1) } }
-const sortedHand = computed(() => {
-  const cards = [...(game.match?.hand || [])]
-  return cards.sort((left, right) => {
-    const a = cardParts(left)
-    const b = cardParts(right)
-    const rankDiff = rankOrder.indexOf(a.rank) - rankOrder.indexOf(b.rank)
-    const suitDiff = suitOrder.indexOf(a.suit) - suitOrder.indexOf(b.suit)
-    return sortMode.value === 'rank' ? rankDiff || suitDiff : suitDiff || rankDiff
-  })
-})
+watch(()=>game.match?.turnDeadlineUtc,deadline=>{if(deadline){const remaining=new Date(deadline).getTime()-Date.now();if(remaining>250)turnBudgetMs.value=remaining}updateCountdown()})
+watch(()=>game.match?.hand.join('|')||'',()=>{const hand=game.match?.hand||[];selected.value=selected.value.filter(card=>hand.includes(card))})
+watch(()=>game.chatEvents.length,()=>{if(game.chatEvents.length)playChatSound()})
+watch(()=>game.rematchMatchId,newId=>{if(newId&&newId!==matchId.value)void router.replace(`/games/tien-len/${newId}`)})
+watch(()=>route.params.matchId,async(value,previous)=>{const next=String(value||'');if(!previous||!next||next===String(previous))return;try{await game.leaveView();await loadMatch(next)}catch(e){localError.value=e instanceof Error?e.message:'Không vào được ván đánh lại.'}})
+watch(()=>game.match?.version,()=>{const match=game.match;if(!match)return;if(!effectsArmed.value){syncEffectBaseline();return}const centerSignature=match.center.join('|');if(centerSignature&&centerSignature!==lastCenterSignature.value){const chopped=isLegacyChop(lastCenterCards.value,match.center);if(chopped){playChopSound();showEffect('chop','⚡ CHẶT!',1050)}else{playCardSound();showEffect('play',match.center.length>1?`RA ${match.center.length} LÁ`:'RA BÀI',560)}}if(match.currentPlayerUserId===auth.user?.id&&lastTurn.value!==match.currentPlayerUserId&&match.status!=='Completed'){playTurnSound();if(centerSignature===lastCenterSignature.value||!centerSignature)showEffect('turn','ĐẾN LƯỢT BẠN',720)}if(match.status==='Completed'&&lastStatus.value!=='Completed'){playVictorySound();showEffect('victory','🏆 KẾT THÚC VÁN',1500)}syncEffectBaseline()})
 
-const selectedCards = computed(() => selected.value.filter(card => game.match?.hand.includes(card)))
-const timerRingStyle = computed<Record<string, string>>(() => ({
-  background: `conic-gradient(#f4d06f ${Math.round(timerProgress.value * 360)}deg, rgba(255,255,255,.08) 0deg)`
-}))
-const timerDanger = computed(() => secondsLeft.value !== null && secondsLeft.value <= 10)
-
-function updateCountdown() {
-  if (!game.match?.turnDeadlineUtc || completed.value) {
-    secondsLeft.value = null
-    timerProgress.value = 0
-    return
-  }
-  const diff = Math.max(0, new Date(game.match.turnDeadlineUtc).getTime() - Date.now())
-  secondsLeft.value = Math.ceil(diff / 1000)
-  timerProgress.value = Math.max(0, Math.min(1, diff / Math.max(1000, turnBudgetMs.value)))
-}
-
-function showEffect(kind: 'play' | 'turn' | 'victory', label: string, duration = 700) {
-  if (eventTimer !== null) window.clearTimeout(eventTimer)
-  eventFx.value = { kind, label, key: Date.now() }
-  eventTimer = window.setTimeout(() => { eventFx.value = null }, duration)
-}
-
-function syncEffectBaseline() {
-  if (!game.match) return
-  lastCenterSignature.value = game.match.center.join('|')
-  lastTurn.value = game.match.currentPlayerUserId
-  lastStatus.value = game.match.status
-}
-
-function toggleSound() {
-  soundEnabled.value = setSoundEnabled(!soundEnabled.value)
-}
-
-function toggle(card: string) {
-  if (completed.value) return
-  selected.value = selected.value.includes(card)
-    ? selected.value.filter(x => x !== card)
-    : [...selected.value, card]
-}
-
-function clearSelection() { selected.value = [] }
-function toggleSort() { sortMode.value = sortMode.value === 'rank' ? 'suit' : 'rank' }
-
-async function play() {
-  localError.value = ''
-  try {
-    await game.playCards(selectedCards.value)
-    selected.value = []
-  } catch {
-    localError.value = game.error || 'Nước đánh không hợp lệ.'
-  }
-}
-
-async function pass() {
-  localError.value = ''
-  try {
-    await game.passTurn()
-    selected.value = []
-  } catch {
-    localError.value = game.error || 'Không bỏ lượt được.'
-  }
-}
-
-watch(() => game.match?.turnDeadlineUtc, deadline => {
-  if (deadline) {
-    const remaining = new Date(deadline).getTime() - Date.now()
-    if (remaining > 250) turnBudgetMs.value = remaining
-  }
-  updateCountdown()
-})
-
-watch(() => game.match?.hand.join('|') || '', () => {
-  const hand = game.match?.hand || []
-  selected.value = selected.value.filter(card => hand.includes(card))
-})
-
-watch(() => game.match?.version, () => {
-  const match = game.match
-  if (!match) return
-  if (!effectsArmed.value) {
-    syncEffectBaseline()
-    return
-  }
-
-  const centerSignature = match.center.join('|')
-  if (centerSignature && centerSignature !== lastCenterSignature.value) {
-    playCardSound()
-    showEffect('play', match.center.length > 1 ? `RA ${match.center.length} LÁ` : 'RA BÀI', 560)
-  }
-
-  if (match.currentPlayerUserId === auth.user?.id && lastTurn.value !== match.currentPlayerUserId && match.status !== 'Completed') {
-    playTurnSound()
-    if (centerSignature === lastCenterSignature.value || !centerSignature) showEffect('turn', 'ĐẾN LƯỢT BẠN', 720)
-  }
-
-  if (match.status === 'Completed' && lastStatus.value !== 'Completed') {
-    playVictorySound()
-    showEffect('victory', '🏆 KẾT THÚC VÁN', 1500)
-  }
-
-  syncEffectBaseline()
-})
-
-onMounted(async () => {
-  try {
-    await game.initialize(matchId)
-    syncEffectBaseline()
-    effectsArmed.value = true
-    timerInterval = window.setInterval(updateCountdown, 250)
-    updateCountdown()
-  } catch (e) {
-    localError.value = e instanceof Error ? e.message : 'Không vào được ván.'
-  }
-})
-
-onBeforeUnmount(() => {
-  if (timerInterval !== null) window.clearInterval(timerInterval)
-  if (eventTimer !== null) window.clearTimeout(eventTimer)
-  void game.leaveView()
-})
+onMounted(async()=>{try{await loadMatch(matchId.value);timerInterval=window.setInterval(updateCountdown,250)}catch(e){localError.value=e instanceof Error?e.message:'Không vào được ván.'}})
+onBeforeUnmount(()=>{if(timerInterval!==null)window.clearInterval(timerInterval);if(eventTimer!==null)window.clearTimeout(eventTimer);void game.leaveView()})
 </script>
 
 <template>
-  <main class="premium-game-page">
-    <section v-if="game.match" class="premium-game-shell" :class="{ 'my-turn': isMyTurn && !completed }">
-      <header class="premium-hud">
-        <div class="premium-hud-brand">
-          <div class="premium-crest">♠</div>
-          <div>
-            <span class="premium-kicker">M7 · PREMIUM TABLE</span>
-            <strong>Tiến Lên Miền Nam</strong>
-            <small>Match {{ matchId.slice(0, 8) }} · v{{ game.match.version }}</small>
-          </div>
-        </div>
-
-        <div class="premium-turn-panel">
-          <div v-if="!completed" class="timer-ring" :class="{ danger: timerDanger }" :style="timerRingStyle">
-            <div><strong>{{ secondsLeft ?? '—' }}</strong><small>GIÂY</small></div>
-          </div>
-          <div class="turn-copy">
-            <span>{{ completed ? 'VÁN ĐÃ KẾT THÚC' : isMyTurn ? 'ĐẾN LƯỢT BẠN' : game.match.currentPlayerIsBot ? 'BOT ĐANG TÍNH' : 'ĐANG CHỜ' }}</span>
-            <strong>{{ completed ? '🏆 Xem thứ hạng' : isMyTurn ? 'Chọn bài và ra tay' : game.match.players.find(x => x.userId === game.match?.currentPlayerUserId)?.displayName || 'Đối thủ' }}</strong>
-          </div>
-        </div>
-
-        <div class="premium-hud-actions">
-          <button type="button" class="utility-button" @click="toggleSound">{{ soundEnabled ? '🔊 SFX' : '🔇 SFX' }}</button>
-          <button type="button" class="utility-button" @click="toggleSort">⇅ {{ sortMode === 'rank' ? 'Theo số' : 'Theo chất' }}</button>
-          <button type="button" class="utility-button" @click="router.push('/')">↩ Sảnh</button>
-        </div>
-      </header>
-
-      <p v-if="localError || game.error" class="game-error">{{ localError || game.error }}</p>
-
-      <div class="casino-table">
-        <div class="table-rail" aria-hidden="true" />
-        <div class="table-felt-mark" aria-hidden="true">♠</div>
-
-        <PlayerSeat
-          v-for="item in positionedOpponents"
-          :key="item.player.userId"
-          :player="item.player"
-          :position="item.position"
-          :current="game.match.currentPlayerUserId === item.player.userId && !completed"
-        />
-
-        <section class="center-zone" :class="{ active: game.match.center.length > 0 }">
-          <div class="center-label">
-            <span>BÀN ĐẤU</span>
-            <strong>{{ centerLabel }}</strong>
-          </div>
-          <div v-if="game.match.center.length" class="center-cards">
-            <PlayingCard
-              v-for="(card, index) in game.match.center"
-              :key="`${game.match.version}-${card}`"
-              :code="card"
-              compact
-              disabled
-              class="center-card"
-              :style="{ zIndex: index + 1 }"
-            />
-          </div>
-          <div v-else class="center-empty">
-            <span>♠</span>
-            <strong>{{ game.match.isOpeningPlay ? 'Nước mở đầu' : 'Bàn đang trống' }}</strong>
-            <small>{{ game.match.isOpeningPlay ? 'Phải có 3♠ nếu đang giữ' : 'Người thắng vòng được đi trước' }}</small>
-          </div>
-        </section>
-
-        <transition name="fx-pop">
-          <div v-if="eventFx" :key="eventFx.key" class="game-event" :class="`event-${eventFx.kind}`">
-            <span class="event-shock" />
-            <strong>{{ eventFx.label }}</strong>
-          </div>
-        </transition>
-
-        <section v-if="completed" class="gameover-overlay">
-          <span class="gameover-crown">♛</span>
-          <h2>KẾT QUẢ VÁN ĐẤU</h2>
-          <div class="podium-list">
-            <div v-for="(winnerId, index) in game.match.winnerOrder" :key="winnerId" :class="{ me: winnerId === auth.user?.id }">
-              <span>{{ ['🥇','🥈','🥉','💩'][index] || `#${index + 1}` }}</span>
-              <strong>{{ game.match.players.find(x => x.userId === winnerId)?.displayName || winnerId.slice(0, 8) }}</strong>
-              <small v-if="winnerId === auth.user?.id">BẠN</small>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <section v-if="selfPlayer" class="player-dock" :class="{ current: isMyTurn && !completed, finished: selfPlayer.hasFinished }">
-        <div class="self-summary">
-          <div class="self-avatar">{{ selfPlayer.isBot ? '🤖' : 'YOU' }}</div>
-          <div>
-            <span>{{ selfPlayer.isBot ? 'SERVER BOT' : 'BẠN' }}</span>
-            <strong>{{ selfPlayer.displayName }}</strong>
-            <small>{{ selfPlayer.hasFinished ? `Đã về #${selfPlayer.finishPosition}` : `${selfPlayer.cardCount} lá còn lại` }}</small>
-          </div>
-        </div>
-
-        <div v-if="!completed && !selfPlayer.hasFinished" class="staging-zone">
-          <div class="staging-head">
-            <span>BÀI ĐANG CHỌN</span>
-            <button v-if="selectedCards.length" type="button" @click="clearSelection">Bỏ chọn</button>
-          </div>
-          <div v-if="selectedCards.length" class="staging-cards">
-            <PlayingCard v-for="card in selectedCards" :key="`stage-${card}`" :code="card" compact @select="toggle" />
-          </div>
-          <small v-else>Click lá bài phía dưới để chọn</small>
-        </div>
-
-        <div v-if="!completed && !selfPlayer.hasFinished" class="action-zone">
-          <button type="button" class="play-action" :disabled="!isMyTurn || !selectedCards.length || game.busy" @click="play">
-            <span>ĐÁNH BÀI</span><strong>{{ selectedCards.length ? `${selectedCards.length} LÁ` : 'CHỌN BÀI' }}</strong>
-          </button>
-          <button type="button" class="pass-action" :disabled="!isMyTurn || !game.match.center.length || game.busy" @click="pass">BỎ LƯỢT</button>
-        </div>
-      </section>
-
-      <section v-if="!completed && selfPlayer && !selfPlayer.hasFinished" class="hand-zone">
-        <div class="hand-meta">
-          <span>BÀI CỦA BẠN · {{ game.match.hand.length }} LÁ</span>
-          <small>{{ isMyTurn ? 'Đang tới lượt — chọn tổ hợp muốn đánh' : 'Có thể chuẩn bị bài trước khi tới lượt' }}</small>
-        </div>
-        <div class="hand-cards">
-          <PlayingCard
-            v-for="(card, index) in sortedHand"
-            :key="card"
-            :code="card"
-            :selected="selected.includes(card)"
-            class="hand-card"
-            :style="{ zIndex: index + 1 }"
-            @select="toggle"
-          />
-        </div>
-      </section>
-
-      <section v-else-if="selfPlayer?.hasFinished && !completed" class="finished-waiting">
-        🎉 Bạn đã hết bài. Đang chờ những người chơi còn lại kết thúc ván…
-      </section>
-    </section>
-
-    <div v-else class="game-loading"><span>♠</span><strong>Đang đồng bộ bàn đấu…</strong></div>
-  </main>
+  <main class="premium-game-page"><section v-if="game.match" class="premium-game-shell" :class="{ 'my-turn': isMyTurn && !completed }">
+    <header class="premium-hud">
+      <div class="premium-hud-brand"><div class="premium-crest">♠</div><div><span class="premium-kicker">M7 · PREMIUM TABLE</span><strong>Tiến Lên Miền Nam</strong><small>Match {{ matchId.slice(0,8) }} · v{{ game.match.version }}</small></div></div>
+      <div class="premium-turn-panel"><div v-if="!completed" class="timer-ring" :class="{ danger: timerDanger }" :style="timerRingStyle"><div><strong>{{ secondsLeft ?? '—' }}</strong><small>GIÂY</small></div></div><div class="turn-copy"><span>{{ completed?'VÁN ĐÃ KẾT THÚC':isMyTurn?'ĐẾN LƯỢT BẠN':game.match.currentPlayerIsBot?'BOT ĐANG TÍNH':'ĐANG CHỜ' }}</span><strong>{{ completed?'🏆 Xem thứ hạng':isMyTurn?'Chọn bài và ra tay':game.match.players.find(x=>x.userId===game.match?.currentPlayerUserId)?.displayName||'Đối thủ' }}</strong></div></div>
+      <div class="premium-hud-actions"><QuickChat :players="game.match.players" :self-user-id="auth.user?.id"/><button type="button" class="utility-button" @click="toggleSound">{{ soundEnabled?'🔊 SFX':'🔇 SFX' }}</button><button type="button" class="utility-button" @click="toggleSort">⇅ {{ sortMode==='rank'?'Theo số':'Theo chất' }}</button><button type="button" class="utility-button" @click="router.push('/')">↩ Sảnh</button></div>
+    </header>
+    <p v-if="localError||game.error" class="game-error">{{ localError||game.error }}</p>
+    <div class="casino-table" :class="{ chopping:eventFx?.kind==='chop' }"><div class="table-rail"/><div class="table-felt-mark">♠</div>
+      <PlayerSeat v-for="item in positionedOpponents" :key="item.player.userId" :player="item.player" :position="item.position" :current="game.match.currentPlayerUserId===item.player.userId&&!completed" :chat-text="latestChatFor(item.player.userId)" :throw-emoji="reactionFor(item.player.userId)"/>
+      <section class="center-zone" :class="{ active:game.match.center.length>0 }"><div class="center-label"><span>BÀN ĐẤU</span><strong>{{ centerLabel }}</strong></div><div v-if="game.match.center.length" class="center-cards"><PlayingCard v-for="(card,index) in game.match.center" :key="`${card}-${index}`" :code="card" compact disabled class="center-card" :style="{zIndex:index+1}"/></div><div v-else class="center-empty"><span>♠</span><strong>{{ game.match.isOpeningPlay?'Nước mở đầu':'Bàn đang trống' }}</strong><small>{{ game.match.isOpeningPlay?'Phải có 3♠ nếu đang giữ':'Người thắng vòng được đi trước' }}</small></div></section>
+      <transition name="fx-pop"><div v-if="eventFx" :key="eventFx.key" class="game-event" :class="`event-${eventFx.kind}`"><span class="event-shock"/><strong>{{ eventFx.label }}</strong></div></transition>
+      <section v-if="completed" class="gameover-overlay"><span class="gameover-crown">♛</span><h2>KẾT QUẢ VÁN ĐẤU</h2><div class="podium-list"><div v-for="(winnerId,index) in game.match.winnerOrder" :key="winnerId" :class="{me:winnerId===auth.user?.id}"><span>{{ ['🥇','🥈','🥉','💩'][index]||`#${index+1}` }}</span><strong>{{ game.match.players.find(x=>x.userId===winnerId)?.displayName||winnerId.slice(0,8) }}</strong><small v-if="winnerId===auth.user?.id">BẠN</small></div></div><div class="gameover-actions"><button type="button" class="rematch-action" :disabled="rematchBusy" @click="requestRematch">{{ rematchBusy?'⏳ Đang chia bài...':'🔥 Đánh lại trên bàn này' }}</button><button type="button" class="secondary-action" @click="router.push('/')">↩ Về sảnh</button></div></section>
+    </div>
+    <section v-if="selfPlayer" class="player-dock" :class="{current:isMyTurn&&!completed,finished:selfPlayer.hasFinished}"><div v-if="latestChatFor(selfPlayer.userId)" class="self-chat">{{ latestChatFor(selfPlayer.userId) }}</div><div v-if="reactionFor(selfPlayer.userId)" class="self-reaction">{{ reactionFor(selfPlayer.userId) }}</div><div class="self-summary"><div class="self-avatar">{{ selfPlayer.isBot?'🤖':'YOU' }}</div><div><span>{{ selfPlayer.isBot?'SERVER BOT':'BẠN' }}</span><strong>{{ selfPlayer.displayName }}</strong><small>{{ selfPlayer.hasFinished?`Đã về #${selfPlayer.finishPosition}`:`${selfPlayer.cardCount} lá còn lại` }}</small></div></div><div v-if="!completed&&!selfPlayer.hasFinished" class="staging-zone"><div class="staging-head"><span>BÀI ĐANG CHỌN</span><button v-if="selectedCards.length" @click="clearSelection">Bỏ chọn</button></div><div v-if="selectedCards.length" class="staging-cards"><PlayingCard v-for="card in selectedCards" :key="`stage-${card}`" :code="card" compact @select="toggle"/></div><small v-else>Click lá bài phía dưới để chọn</small></div><div v-if="!completed&&!selfPlayer.hasFinished" class="action-zone"><button class="play-action" :disabled="!isMyTurn||!selectedCards.length||game.busy" @click="play"><span>ĐÁNH BÀI</span><strong>{{ selectedCards.length?`${selectedCards.length} LÁ`:'CHỌN BÀI' }}</strong></button><button class="pass-action" :disabled="!isMyTurn||!game.match.center.length||game.busy" @click="pass">BỎ LƯỢT</button></div></section>
+    <section v-if="!completed&&selfPlayer&&!selfPlayer.hasFinished" class="hand-zone"><div class="hand-meta"><span>BÀI CỦA BẠN · {{ game.match.hand.length }} LÁ</span><small>{{ isMyTurn?'Đang tới lượt — chọn tổ hợp muốn đánh':'Có thể chuẩn bị bài trước khi tới lượt' }}</small></div><div class="hand-cards"><PlayingCard v-for="(card,index) in sortedHand" :key="card" :code="card" :selected="selected.includes(card)" class="hand-card" :style="{zIndex:index+1}" @select="toggle"/></div></section>
+    <section v-else-if="selfPlayer?.hasFinished&&!completed" class="finished-waiting">🎉 Bạn đã hết bài. Đang chờ những người chơi còn lại kết thúc ván…</section>
+  </section><div v-else class="game-loading"><span>♠</span><strong>Đang đồng bộ bàn đấu…</strong></div></main>
 </template>
 
 <style scoped>
-.premium-game-page {
-  min-height: 100vh;
-  padding: 14px;
-  color: #eef4ef;
-  background:
-    radial-gradient(circle at 50% -10%, rgba(34,120,78,.44), transparent 42%),
-    linear-gradient(180deg, #041a12, #02100c 72%);
-}
-.premium-game-shell {
-  position: relative;
-  width: min(1220px, 100%);
-  margin: 0 auto;
-  padding: 12px;
-  overflow: hidden;
-  border: 1px solid rgba(244,208,111,.28);
-  border-radius: 24px;
-  background: rgba(3,19,13,.88);
-  box-shadow: 0 30px 80px rgba(0,0,0,.4), inset 0 0 0 1px rgba(255,255,255,.02);
-}
-.premium-game-shell.my-turn { box-shadow: 0 30px 80px rgba(0,0,0,.4), 0 0 42px rgba(51,198,126,.12), inset 0 0 0 1px rgba(255,255,255,.02); }
-.premium-hud {
-  min-height: 70px;
-  display: grid;
-  grid-template-columns: minmax(230px, 1fr) auto minmax(230px, 1fr);
-  align-items: center;
-  gap: 14px;
-  padding: 10px 13px;
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: 17px;
-  background: linear-gradient(180deg, rgba(9,50,34,.86), rgba(4,28,19,.9));
-}
-.premium-hud-brand { display: flex; align-items: center; gap: 10px; }
-.premium-hud-brand > div:last-child { display: grid; gap: 1px; }
-.premium-hud-brand strong { font-family: Georgia, serif; color: #fff1bd; font-size: 1.02rem; }
-.premium-hud-brand small { color: rgba(223,235,229,.48); font-size: .65rem; }
-.premium-kicker { color: #f4d06f; font-size: .55rem; font-weight: 900; letter-spacing: .18em; }
-.premium-crest {
-  width: 43px; height: 43px; display: grid; place-items: center; flex: 0 0 43px;
-  border: 1px solid rgba(244,208,111,.58); border-radius: 50%; color: #f4d06f;
-  background: radial-gradient(circle at 35% 30%, #176f49, #073523 67%, #031b12);
-  font-family: Georgia, serif; font-size: 1.45rem; box-shadow: 0 0 22px rgba(244,208,111,.1);
-}
-.premium-turn-panel { display: flex; align-items: center; gap: 10px; min-width: 240px; }
-.timer-ring {
-  width: 53px; height: 53px; display: grid; place-items: center; flex: 0 0 53px; border-radius: 50%; padding: 4px;
-  transition: background .2s linear; box-shadow: 0 0 18px rgba(244,208,111,.13);
-}
-.timer-ring > div { width: 100%; height: 100%; display: grid; place-items: center; align-content: center; border-radius: 50%; background: #06281c; line-height: 1; }
-.timer-ring strong { color: #ffe49a; font-size: 1rem; }
-.timer-ring small { margin-top: 2px; color: rgba(255,255,255,.38); font-size: .42rem; font-weight: 900; letter-spacing: .08em; }
-.timer-ring.danger { animation: dangerPulse .6s ease-in-out infinite alternate; }
-.turn-copy { display: grid; gap: 2px; }
-.turn-copy span { color: #f4d06f; font-size: .54rem; font-weight: 900; letter-spacing: .13em; }
-.turn-copy strong { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .78rem; }
-.premium-hud-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 6px; }
-.utility-button {
-  min-height: 30px; padding: 5px 9px; border: 1px solid rgba(244,208,111,.23); border-radius: 999px;
-  color: #f7e8b4; background: rgba(255,255,255,.04); font-size: .64rem; font-weight: 800;
-}
-.utility-button:hover { border-color: rgba(244,208,111,.55); background: rgba(244,208,111,.08); }
-.game-error { position: absolute; z-index: 60; top: 88px; left: 50%; transform: translateX(-50%); width: min(640px, calc(100% - 28px)); margin: 0; padding: 9px 13px; border: 1px solid rgba(255,105,105,.38); border-radius: 10px; background: rgba(97,20,25,.94); color: #ffd2d2; font-size: .74rem; }
-.casino-table {
-  position: relative;
-  min-height: 440px;
-  margin-top: 9px;
-  overflow: hidden;
-  border: 12px solid #4b2817;
-  border-radius: 46% / 19%;
-  background:
-    radial-gradient(ellipse at center, rgba(29,122,77,.8) 0, rgba(9,81,51,.96) 47%, #06422d 75%, #043120 100%);
-  box-shadow: inset 0 0 90px rgba(0,0,0,.4), inset 0 0 0 3px rgba(244,208,111,.18), 0 18px 30px rgba(0,0,0,.32);
-}
-.table-rail { position: absolute; inset: -7px; border: 1px solid rgba(244,208,111,.32); border-radius: inherit; pointer-events: none; box-shadow: inset 0 0 14px rgba(255,255,255,.04); }
-.table-felt-mark { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); color: rgba(244,208,111,.035); font-family: Georgia, serif; font-size: 14rem; line-height: 1; user-select: none; }
-.center-zone {
-  position: absolute; z-index: 8; left: 50%; top: 55%; transform: translate(-50%,-50%);
-  width: min(500px, 52%); min-height: 170px; display: grid; place-items: center; align-content: center;
-  border: 1px dashed rgba(244,208,111,.16); border-radius: 42px; background: rgba(0,0,0,.08);
-  transition: border-color .2s ease, box-shadow .2s ease;
-}
-.center-zone.active { border-style: solid; border-color: rgba(244,208,111,.22); box-shadow: inset 0 0 45px rgba(0,0,0,.14); }
-.center-label { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 7px; align-items: baseline; white-space: nowrap; }
-.center-label span { color: rgba(244,208,111,.42); font-size: .49rem; font-weight: 900; letter-spacing: .18em; }
-.center-label strong { color: #f4d06f; font-size: .62rem; }
-.center-cards { display: flex; align-items: center; justify-content: center; padding-top: 18px; }
-.center-cards :deep(.center-card + .center-card) { margin-left: -19px; }
-.center-cards :deep(.playing-card) { animation: cardSlam .42s cubic-bezier(.16,.88,.27,1.18) both; }
-.center-empty { display: grid; place-items: center; gap: 3px; padding-top: 17px; color: rgba(240,246,242,.55); }
-.center-empty > span { color: rgba(244,208,111,.34); font-family: Georgia, serif; font-size: 2.4rem; }
-.center-empty strong { font-size: .78rem; }
-.center-empty small { color: rgba(230,240,234,.38); font-size: .62rem; }
-.game-event { position: absolute; z-index: 80; left: 50%; top: 47%; transform: translate(-50%,-50%); pointer-events: none; }
-.game-event strong { display: block; white-space: nowrap; padding: 10px 20px; border: 1px solid rgba(244,208,111,.65); border-radius: 999px; color: #ffe9a5; background: rgba(3,20,13,.93); font-size: .9rem; letter-spacing: .08em; box-shadow: 0 0 35px rgba(244,208,111,.22); }
-.event-victory strong { padding: 13px 25px; font-size: 1.18rem; }
-.event-shock { position: absolute; left: 50%; top: 50%; width: 32px; height: 32px; margin: -16px; border: 2px solid rgba(255,221,120,.76); border-radius: 50%; animation: shockRing .7s ease-out both; }
-.gameover-overlay { position: absolute; z-index: 40; inset: 55px 15%; display: grid; place-items: center; align-content: center; gap: 10px; padding: 20px; border: 1px solid rgba(244,208,111,.45); border-radius: 28px; background: rgba(3,24,16,.93); box-shadow: 0 22px 55px rgba(0,0,0,.46); }
-.gameover-crown { color: #f4d06f; font-size: 2.6rem; }
-.gameover-overlay h2 { margin: 0 0 4px; color: #ffe6a0; font-family: Georgia, serif; font-size: 1.35rem; letter-spacing: .08em; }
-.podium-list { width: min(420px, 100%); display: grid; gap: 6px; }
-.podium-list > div { display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 8px; padding: 8px 11px; border-radius: 10px; background: rgba(255,255,255,.045); }
-.podium-list > div.me { border: 1px solid rgba(244,208,111,.46); background: rgba(244,208,111,.09); }
-.podium-list small { color: #f4d06f; font-size: .55rem; font-weight: 900; }
-.player-dock {
-  display: grid; grid-template-columns: 180px minmax(230px,1fr) 260px; gap: 12px; align-items: center;
-  margin-top: 9px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.09); border-radius: 17px;
-  background: linear-gradient(180deg, rgba(7,45,30,.86), rgba(3,27,18,.9)); transition: border-color .2s, box-shadow .2s;
-}
-.player-dock.current { border-color: rgba(244,208,111,.38); box-shadow: 0 0 26px rgba(61,211,139,.11), inset 0 0 0 1px rgba(244,208,111,.05); }
-.player-dock.finished { grid-template-columns: 1fr; }
-.self-summary { display: flex; align-items: center; gap: 9px; }
-.self-avatar { width: 44px; height: 44px; display: grid; place-items: center; flex: 0 0 44px; border: 1px solid rgba(244,208,111,.48); border-radius: 50%; color: #ffdf83; background: radial-gradient(circle at 35% 30%, #16764d, #073825 70%); font-size: .65rem; font-weight: 900; }
-.self-summary > div:last-child { display: grid; gap: 1px; min-width: 0; }
-.self-summary span { color: #f4d06f; font-size: .5rem; font-weight: 900; letter-spacing: .14em; }
-.self-summary strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8rem; }
-.self-summary small { color: rgba(227,237,232,.47); font-size: .62rem; }
-.staging-zone { min-height: 79px; display: grid; place-items: center; align-content: center; padding: 4px 10px; border-left: 1px solid rgba(255,255,255,.06); border-right: 1px solid rgba(255,255,255,.06); }
-.staging-head { width: 100%; display: flex; align-items: center; justify-content: center; gap: 7px; }
-.staging-head span { color: rgba(244,208,111,.54); font-size: .52rem; font-weight: 900; letter-spacing: .14em; }
-.staging-head button { padding: 2px 6px; border: 0; border-radius: 999px; color: rgba(255,255,255,.55); background: rgba(255,255,255,.06); font-size: .5rem; }
-.staging-zone > small { color: rgba(225,237,230,.34); font-size: .58rem; }
-.staging-cards { min-height: 62px; display: flex; align-items: center; justify-content: center; padding-top: 6px; }
-.staging-cards :deep(.playing-card + .playing-card) { margin-left: -24px; }
-.staging-cards :deep(.playing-card) { transform: scale(.7); margin-top: -10px; margin-bottom: -12px; }
-.action-zone { display: flex; justify-content: flex-end; align-items: center; gap: 7px; }
-.play-action, .pass-action { min-height: 42px; border-radius: 12px; font-weight: 900; transition: transform .12s, filter .12s, opacity .12s; }
-.play-action { min-width: 135px; display: grid; place-items: center; align-content: center; border: 1px solid #f4d06f; color: #082117; background: linear-gradient(180deg, #f6db82, #cba33e); box-shadow: 0 8px 18px rgba(0,0,0,.24); }
-.play-action span { font-size: .67rem; letter-spacing: .08em; }
-.play-action strong { font-size: .54rem; }
-.pass-action { padding: 0 13px; border: 1px solid rgba(255,255,255,.16); color: #d9e5df; background: rgba(255,255,255,.055); font-size: .64rem; }
-.play-action:not(:disabled):hover, .pass-action:not(:disabled):hover { transform: translateY(-2px); filter: brightness(1.06); }
-.play-action:disabled, .pass-action:disabled { opacity: .34; cursor: not-allowed; }
-.hand-zone { margin-top: 7px; padding: 8px 12px 5px; border: 1px solid rgba(255,255,255,.065); border-radius: 15px; background: rgba(0,0,0,.12); }
-.hand-meta { display: flex; justify-content: space-between; gap: 12px; padding: 0 5px 5px; }
-.hand-meta span { color: rgba(244,208,111,.62); font-size: .55rem; font-weight: 900; letter-spacing: .13em; }
-.hand-meta small { color: rgba(224,237,229,.35); font-size: .55rem; }
-.hand-cards { min-height: 106px; display: flex; align-items: flex-end; justify-content: center; overflow-x: auto; overflow-y: hidden; padding: 18px 24px 4px; scrollbar-width: thin; scrollbar-color: rgba(244,208,111,.3) transparent; }
-.hand-cards :deep(.hand-card + .hand-card) { margin-left: -23px; }
-.hand-cards :deep(.hand-card) { flex-shrink: 0; }
-.finished-waiting { margin-top: 8px; padding: 14px; text-align: center; border: 1px solid rgba(244,208,111,.22); border-radius: 13px; color: #f5d77d; background: rgba(244,208,111,.06); font-size: .74rem; }
-.game-loading { min-height: 100vh; display: grid; place-items: center; align-content: center; gap: 9px; color: rgba(236,244,239,.72); background: #031a12; }
-.game-loading span { color: #f4d06f; font-family: Georgia, serif; font-size: 3rem; animation: loadingSpin 1.5s ease-in-out infinite; }
-@keyframes loadingSpin { 50% { transform: rotate(180deg) scale(1.12); } }
-@keyframes dangerPulse { to { box-shadow: 0 0 26px rgba(255,77,77,.44); filter: saturate(1.4); } }
-@keyframes cardSlam { 0% { opacity: 0; transform: translateY(-48px) scale(1.15) rotate(-4deg); } 68% { opacity: 1; transform: translateY(4px) scale(.97) rotate(1deg); } 100% { transform: translateY(0) scale(1); } }
-@keyframes shockRing { 0% { opacity: .9; transform: scale(.45); } 100% { opacity: 0; transform: scale(7); } }
-.fx-pop-enter-active, .fx-pop-leave-active { transition: opacity .16s ease; }
-.fx-pop-enter-from, .fx-pop-leave-to { opacity: 0; }
-@media (max-width: 900px) {
-  .premium-hud { grid-template-columns: 1fr auto; }
-  .premium-turn-panel { grid-column: 1 / -1; grid-row: 2; justify-content: center; }
-  .premium-hud-actions { grid-column: 2; grid-row: 1; }
-  .casino-table { min-height: 410px; }
-  .player-dock { grid-template-columns: 150px 1fr; }
-  .action-zone { grid-column: 1 / -1; justify-content: center; }
-}
-@media (max-width: 680px) {
-  .premium-game-page { padding: 5px; }
-  .premium-game-shell { padding: 6px; border-radius: 14px; }
-  .premium-hud { padding: 8px; gap: 7px; border-radius: 12px; }
-  .premium-hud-brand small { display: none; }
-  .premium-hud-actions { gap: 3px; }
-  .utility-button { padding: 4px 7px; font-size: .56rem; }
-  .premium-turn-panel { min-width: 0; }
-  .casino-table { min-height: 360px; border-width: 8px; border-radius: 33% / 13%; }
-  .center-zone { width: 58%; min-height: 142px; top: 56%; border-radius: 24px; }
-  .center-label { top: 8px; }
-  .table-felt-mark { font-size: 9rem; }
-  .gameover-overlay { inset: 45px 7%; }
-  .player-dock { grid-template-columns: 1fr; gap: 7px; }
-  .self-summary { justify-content: center; }
-  .staging-zone { border: 0; border-top: 1px solid rgba(255,255,255,.06); border-bottom: 1px solid rgba(255,255,255,.06); }
-  .action-zone { justify-content: center; }
-  .hand-meta small { display: none; }
-  .hand-cards { justify-content: flex-start; padding-inline: 18px; }
-  .hand-cards :deep(.hand-card + .hand-card) { margin-left: -18px; }
-}
+.premium-game-page{min-height:100vh;padding:14px;color:#eef4ef;background:radial-gradient(circle at 50% -10%,rgba(34,120,78,.44),transparent 42%),linear-gradient(180deg,#041a12,#02100c 72%)}.premium-game-shell{position:relative;width:min(1220px,100%);margin:0 auto;padding:12px;overflow:hidden;border:1px solid rgba(244,208,111,.28);border-radius:24px;background:rgba(3,19,13,.88);box-shadow:0 30px 80px rgba(0,0,0,.4),inset 0 0 0 1px rgba(255,255,255,.02)}.premium-hud{min-height:70px;display:grid;grid-template-columns:minmax(230px,1fr) auto minmax(230px,1fr);align-items:center;gap:14px;padding:10px 13px;border:1px solid rgba(255,255,255,.08);border-radius:17px;background:linear-gradient(180deg,rgba(9,50,34,.86),rgba(4,28,19,.9))}.premium-hud-brand{display:flex;align-items:center;gap:10px}.premium-hud-brand>div:last-child{display:grid}.premium-hud-brand strong{font-family:Georgia,serif;color:#fff1bd}.premium-hud-brand small{color:rgba(223,235,229,.48);font-size:.65rem}.premium-kicker{color:#f4d06f;font-size:.55rem;font-weight:900;letter-spacing:.18em}.premium-crest{width:43px;height:43px;display:grid;place-items:center;border:1px solid rgba(244,208,111,.58);border-radius:50%;color:#f4d06f;background:#073523;font-size:1.45rem}.premium-turn-panel{display:flex;align-items:center;gap:10px;min-width:240px}.timer-ring{width:53px;height:53px;display:grid;place-items:center;border-radius:50%;padding:4px}.timer-ring>div{width:100%;height:100%;display:grid;place-items:center;align-content:center;border-radius:50%;background:#06281c}.timer-ring strong{color:#ffe49a}.timer-ring small{font-size:.42rem;color:#777}.timer-ring.danger{animation:dangerPulse .6s infinite alternate}.turn-copy{display:grid}.turn-copy span{color:#f4d06f;font-size:.54rem;font-weight:900;letter-spacing:.13em}.turn-copy strong{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem}.premium-hud-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:6px}.utility-button{min-height:30px;padding:5px 9px;border:1px solid rgba(244,208,111,.23);border-radius:999px;color:#f7e8b4;background:rgba(255,255,255,.04);font-size:.64rem;font-weight:800}.game-error{position:absolute;z-index:60;top:88px;left:50%;transform:translateX(-50%);width:min(640px,calc(100% - 28px));padding:9px;border-radius:10px;background:rgba(97,20,25,.94);color:#ffd2d2}.casino-table{position:relative;min-height:440px;margin-top:9px;overflow:hidden;border:12px solid #4b2817;border-radius:46% / 19%;background:radial-gradient(ellipse at center,rgba(29,122,77,.8),rgba(9,81,51,.96) 47%,#06422d 75%,#043120);box-shadow:inset 0 0 90px rgba(0,0,0,.4),inset 0 0 0 3px rgba(244,208,111,.18),0 18px 30px rgba(0,0,0,.32)}.casino-table.chopping{animation:tableShock .52s ease-out}.table-rail{position:absolute;inset:-7px;border:1px solid rgba(244,208,111,.32);border-radius:inherit}.table-felt-mark{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:rgba(244,208,111,.035);font-size:14rem}.center-zone{position:absolute;z-index:8;left:50%;top:55%;transform:translate(-50%,-50%);width:min(500px,52%);min-height:170px;display:grid;place-items:center;align-content:center;border:1px dashed rgba(244,208,111,.16);border-radius:42px;background:rgba(0,0,0,.08)}.center-label{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:7px}.center-label span{color:rgba(244,208,111,.42);font-size:.49rem;font-weight:900}.center-label strong{color:#f4d06f;font-size:.62rem}.center-cards{display:flex;align-items:center;justify-content:center;padding-top:18px}.center-cards :deep(.center-card + .center-card){margin-left:-19px}.center-cards :deep(.playing-card){animation:cardSlam .42s both}.chopping .center-cards :deep(.playing-card){animation:chopSlam .62s both}.center-empty{display:grid;place-items:center;gap:3px;padding-top:17px;color:#789}.center-empty>span{font-size:2.4rem;color:rgba(244,208,111,.34)}.center-empty small{font-size:.62rem}.game-event{position:absolute;z-index:80;left:50%;top:47%;transform:translate(-50%,-50%);pointer-events:none}.game-event strong{display:block;white-space:nowrap;padding:10px 20px;border:1px solid rgba(244,208,111,.65);border-radius:999px;color:#ffe9a5;background:rgba(3,20,13,.93);font-size:.9rem;box-shadow:0 0 35px rgba(244,208,111,.22)}.event-chop strong{padding:13px 25px;border-color:#ffcf4b;background:radial-gradient(circle,rgba(112,43,10,.94),rgba(29,10,6,.97));font-size:1.28rem;box-shadow:0 0 50px rgba(255,112,27,.44)}.event-shock{position:absolute;left:50%;top:50%;width:32px;height:32px;margin:-16px;border:2px solid #ffdb78;border-radius:50%;animation:shockRing .7s both}.gameover-overlay{position:absolute;z-index:40;inset:55px 15%;display:grid;place-items:center;align-content:center;gap:10px;padding:20px;border:1px solid rgba(244,208,111,.45);border-radius:28px;background:rgba(3,24,16,.95)}.gameover-crown{font-size:2.6rem;color:#f4d06f}.gameover-overlay h2{margin:0;color:#ffe6a0}.podium-list{width:min(420px,100%);display:grid;gap:6px}.podium-list>div{display:grid;grid-template-columns:36px 1fr auto;padding:8px 11px;border-radius:10px;background:rgba(255,255,255,.045)}.podium-list>div.me{border:1px solid rgba(244,208,111,.46)}.gameover-actions{display:flex;gap:7px;margin-top:5px}.rematch-action,.secondary-action{padding:9px 12px;border-radius:10px;font-size:.65rem;font-weight:900}.rematch-action{border:1px solid #f4d06f;background:#dfbd52;color:#132519}.secondary-action{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#e4eee8}.player-dock{position:relative;display:grid;grid-template-columns:180px minmax(230px,1fr) 260px;gap:12px;align-items:center;margin-top:9px;padding:10px 12px;border:1px solid rgba(255,255,255,.09);border-radius:17px;background:linear-gradient(180deg,rgba(7,45,30,.86),rgba(3,27,18,.9))}.self-summary{display:flex;align-items:center;gap:9px}.self-avatar{width:44px;height:44px;display:grid;place-items:center;border:1px solid rgba(244,208,111,.48);border-radius:50%;color:#ffdf83;background:#073825;font-size:.65rem;font-weight:900}.self-summary>div:last-child{display:grid}.self-summary span{color:#f4d06f;font-size:.5rem}.self-summary small{font-size:.62rem;color:#789}.self-chat{position:absolute;z-index:7;left:30px;bottom:calc(100% + 5px);max-width:230px;padding:7px 10px;border:1px solid rgba(244,208,111,.34);border-radius:12px;background:rgba(3,22,15,.97);color:#fff2bd;font-size:.63rem}.self-reaction{position:absolute;z-index:8;left:80px;top:-10px;font-size:2.4rem;animation:thrownHit 1.1s both}.staging-zone{min-height:79px;display:grid;place-items:center;align-content:center;border-left:1px solid rgba(255,255,255,.06);border-right:1px solid rgba(255,255,255,.06)}.staging-head{display:flex;gap:7px}.staging-head span{color:#b99;font-size:.52rem}.staging-cards{display:flex}.staging-cards :deep(.playing-card + .playing-card){margin-left:-24px}.staging-cards :deep(.playing-card){transform:scale(.7);margin-top:-10px;margin-bottom:-12px}.action-zone{display:flex;justify-content:flex-end;gap:7px}.play-action,.pass-action{min-height:42px;border-radius:12px;font-weight:900}.play-action{min-width:135px;border:1px solid #f4d06f;background:#e9c95f}.pass-action{padding:0 13px;border:1px solid #555;background:#243d33;color:#ddd}.play-action:disabled,.pass-action:disabled{opacity:.34}.hand-zone{margin-top:7px;padding:8px 12px 5px;border:1px solid rgba(255,255,255,.065);border-radius:15px;background:rgba(0,0,0,.12)}.hand-meta{display:flex;justify-content:space-between}.hand-meta span{color:#c7aa54;font-size:.55rem}.hand-meta small{font-size:.55rem;color:#789}.hand-cards{min-height:106px;display:flex;align-items:flex-end;justify-content:center;overflow-x:auto;overflow-y:hidden;padding:18px 24px 4px}.hand-cards :deep(.hand-card + .hand-card){margin-left:-23px}.finished-waiting{margin-top:8px;padding:14px;text-align:center;color:#f5d77d}.game-loading{min-height:100vh;display:grid;place-items:center;background:#031a12}.game-loading span{font-size:3rem;color:#f4d06f}
+@keyframes dangerPulse{to{box-shadow:0 0 26px rgba(255,77,77,.44)}}@keyframes cardSlam{0%{opacity:0;transform:translateY(-48px) scale(1.15) rotate(-4deg)}68%{opacity:1;transform:translateY(4px) scale(.97)}100%{transform:none}}@keyframes chopSlam{0%{opacity:0;transform:translateY(-95px) scale(1.4) rotate(-7deg)}58%{opacity:1;transform:translateY(7px) scale(.94) rotate(2deg)}100%{transform:none}}@keyframes shockRing{0%{opacity:.9;transform:scale(.45)}100%{opacity:0;transform:scale(7)}}@keyframes tableShock{35%{filter:brightness(1.25);transform:translateX(-2px)}65%{transform:translateX(2px)}100%{filter:none;transform:none}}@keyframes thrownHit{0%{opacity:0;transform:translate(-100px,-100px) rotate(-25deg) scale(.5)}65%{opacity:1;transform:translate(0,0) scale(1.2)}100%{opacity:0;transform:translate(10px,20px) rotate(18deg) scale(.8)}}
+@media(max-width:900px){.premium-hud{grid-template-columns:1fr auto}.premium-turn-panel{grid-column:1/-1;grid-row:2;justify-content:center}.premium-hud-actions{grid-column:2;grid-row:1}.player-dock{grid-template-columns:150px 1fr}.action-zone{grid-column:1/-1;justify-content:center}}
+@media(max-width:680px){.premium-game-page{padding:5px}.premium-game-shell{padding:6px}.premium-hud{padding:8px;gap:7px}.premium-hud-brand small{display:none}.utility-button{padding:4px 7px;font-size:.56rem}.casino-table{min-height:360px;border-width:8px;border-radius:33% / 13%}.center-zone{width:58%;min-height:142px;top:56%}.gameover-overlay{inset:45px 7%}.player-dock{grid-template-columns:1fr}.self-summary{justify-content:center}.staging-zone{border:0;border-top:1px solid #234;border-bottom:1px solid #234}.action-zone{justify-content:center}.hand-meta small{display:none}.hand-cards{justify-content:flex-start;padding-inline:18px}.hand-cards :deep(.hand-card + .hand-card){margin-left:-18px}.gameover-actions{flex-direction:column;width:100%}.gameover-actions button{width:100%}}
 </style>

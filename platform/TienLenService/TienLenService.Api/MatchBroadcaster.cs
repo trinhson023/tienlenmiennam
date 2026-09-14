@@ -16,5 +16,20 @@ public sealed class MatchBroadcaster(IHubContext<TienLenHub> hub, TienLenMatchAp
         }
     }
 
+    public Task BroadcastQuickChatAsync(Guid matchId, MatchQuickChatEvent message, CancellationToken ct) =>
+        BroadcastPayloadAsync(matchId, "QuickChatReceived", message, ct);
+
+    public Task BroadcastThrowAsync(Guid matchId, MatchThrowEvent reaction, CancellationToken ct) =>
+        BroadcastPayloadAsync(matchId, "ThrowReactionReceived", reaction, ct);
+
+    public Task BroadcastRematchAsync(Guid previousMatchId, Guid newMatchId, CancellationToken ct) =>
+        BroadcastPayloadAsync(previousMatchId, "RematchStarted", newMatchId, ct);
+
+    private async Task BroadcastPayloadAsync<T>(Guid matchId, string method, T payload, CancellationToken ct)
+    {
+        foreach (var userId in await matches.GetParticipantIdsAsync(matchId, ct))
+            await hub.Clients.Group(UserGroup(matchId, userId)).SendAsync(method, payload, ct);
+    }
+
     public static string UserGroup(Guid matchId, Guid userId) => $"match:{matchId}:user:{userId}";
 }

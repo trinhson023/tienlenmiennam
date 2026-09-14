@@ -31,11 +31,32 @@ export interface MatchStateView {
   winnerOrder: string[]
 }
 
+export interface MatchQuickChatEvent {
+  eventId: string
+  senderUserId: string
+  senderDisplayName: string
+  text: string
+  sentAtUtc: string
+}
+
+export interface MatchThrowEvent {
+  eventId: string
+  senderUserId: string
+  senderDisplayName: string
+  targetUserId: string
+  type: string
+  emoji: string
+  sentAtUtc: string
+}
+
 export const useTienLenStore = defineStore('tienlen', {
   state: () => ({
     match: null as MatchStateView | null,
     hub: null as HubConnection | null,
     currentMatchId: null as string | null,
+    chatEvents: [] as MatchQuickChatEvent[],
+    latestThrow: null as MatchThrowEvent | null,
+    rematchMatchId: null as string | null,
     busy: false,
     error: ''
   }),
@@ -50,6 +71,17 @@ export const useTienLenStore = defineStore('tienlen', {
           this.error = ''
         }
       })
+      hub.on('QuickChatReceived', (event: MatchQuickChatEvent) => {
+        if (!this.currentMatchId) return
+        this.chatEvents = [...this.chatEvents, event].slice(-8)
+        window.setTimeout(() => { this.chatEvents = this.chatEvents.filter(x => x.eventId !== event.eventId) }, 5000)
+      })
+      hub.on('ThrowReactionReceived', (event: MatchThrowEvent) => {
+        if (!this.currentMatchId) return
+        this.latestThrow = event
+        window.setTimeout(() => { if (this.latestThrow?.eventId === event.eventId) this.latestThrow = null }, 1400)
+      })
+      hub.on('RematchStarted', (newMatchId: string) => { this.rematchMatchId = String(newMatchId) })
       hub.onreconnected(async () => {
         if (!this.currentMatchId) return
         try { await hub.invoke('JoinMatch', this.currentMatchId) } catch { /* UI keeps latest snapshot */ }
@@ -59,6 +91,7 @@ export const useTienLenStore = defineStore('tienlen', {
     },
     async initialize(matchId: string) {
       this.currentMatchId = matchId
+      this.rematchMatchId = null
       this.error = ''
       await this.ensureHub()
       try {
@@ -71,11 +104,9 @@ export const useTienLenStore = defineStore('tienlen', {
     },
     async playCards(cardCodes: string[]) {
       if (!this.match || !this.currentMatchId) return
-      this.busy = true
-      this.error = ''
-      try {
-        await this.hub?.invoke('PlayCards', this.currentMatchId, cardCodes, this.match.version)
-      } catch (e) {
+      this.busy = true; this.error = ''
+      try { await this.hub?.invoke('PlayCards', this.currentMatchId, cardCodes, this.match.version) }
+      catch (e) {
         this.error = e instanceof Error ? e.message : 'Không đánh được bài.'
         try { const { data } = await api.get<MatchStateView>(`/api/tienlen/matches/${this.currentMatchId}`); this.match = data } catch { /* ignore */ }
         throw e
@@ -83,15 +114,25 @@ export const useTienLenStore = defineStore('tienlen', {
     },
     async passTurn() {
       if (!this.match || !this.currentMatchId) return
-      this.busy = true
-      this.error = ''
-      try {
-        await this.hub?.invoke('Pass', this.currentMatchId, this.match.version)
-      } catch (e) {
+      this.busy = true; this.error = ''
+      try { await this.hub?.invoke('Pass', this.currentMatchId, this.match.version) }
+      catch (e) {
         this.error = e instanceof Error ? e.message : 'Không bỏ lượt được.'
         try { const { data } = await api.get<MatchStateView>(`/api/tienlen/matches/${this.currentMatchId}`); this.match = data } catch { /* ignore */ }
         throw e
       } finally { this.busy = false }
+    },
+    async sendQuickChat(text: string) {
+      if (!this.currentMatchId) return
+      this.error = ''
+      try { await this.hub?.invoke('SendQuickChat', this.currentMatchId, text) }
+      catch (e) { this.error = e instanceof Error ? e.message : 'Không gửi được.'; throw e }
+    },
+    async throwReaction(type: string, targetUserId: string) {
+      if (!this.currentMatchId) return
+      this.error = ''
+      try { await this.hub?.invoke('ThrowReaction', this.currentMatchId, type, targetUserId) }
+      catch (e) { this.error = e instanceof Error ? e.message : 'Không ném được.'; throw e }
     },
     async leaveView() {
       if (this.hub?.state === 'Connected' && this.currentMatchId) {
@@ -99,6 +140,9 @@ export const useTienLenStore = defineStore('tienlen', {
       }
       this.match = null
       this.currentMatchId = null
+      this.chatEvents = []
+      this.latestThrow = null
+      this.rematchMatchId = null
       this.error = ''
     }
   }

@@ -10,4 +10,5 @@ public sealed record MatchLaunchResult(bool IsSuccess, Guid? MatchId, string? Er
 public interface IMatchLauncher
 {
     Task<MatchLaunchResult> StartAsync(string gameSlug, Guid roomId, IReadOnlyCollection<MatchLaunchPlayer> players, CancellationToken cancellationToken);
+    Task<MatchLaunchResult> RematchAsync(string gameSlug, Guid previousMatchId, Guid roomId, IReadOnlyCollection<MatchLaunchPlayer> players, CancellationToken cancellationToken);
 }
