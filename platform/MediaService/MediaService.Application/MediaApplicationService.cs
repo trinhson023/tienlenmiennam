@@ -133,8 +133,14 @@ public sealed class MediaApplicationService(
             return MediaResult<MediaRoomState>.Success(next);
         }, ct);
 
-    public async Task<MediaResult<IReadOnlyList<MediaSearchResult>>> SearchAsync(string? query, bool shortOnly, CancellationToken ct)
+    public async Task<MediaResult<IReadOnlyList<MediaSearchResult>>> SearchAsync(Guid roomId, Guid userId, string? query, bool shortOnly, CancellationToken ct)
     {
+        var access = shortOnly
+            ? await RequireMemberAsync(roomId, userId, ct)
+            : await RequireHostAsync(roomId, userId, ct);
+        if (!access.IsSuccess)
+            return MediaResult<IReadOnlyList<MediaSearchResult>>.Failure(access.ErrorCode!, access.ErrorMessage!);
+
         var clean = (query ?? string.Empty).Trim();
         if (clean.Length == 0) return MediaResult<IReadOnlyList<MediaSearchResult>>.Failure("missing_query", shortOnly ? "Thiếu chủ đề Shorts." : "Thiếu từ khóa tìm kiếm.");
         if (clean.Length > 100) return MediaResult<IReadOnlyList<MediaSearchResult>>.Failure("query_too_long", "Từ khóa tìm kiếm quá dài.");
