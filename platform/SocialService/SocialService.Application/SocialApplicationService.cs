@@ -30,6 +30,14 @@ public sealed class SocialApplicationService(IRoomAccessGateway roomAccess, IRec
         return SocialResult<SocialReactionEvent>.Success(new SocialReactionEvent(Guid.NewGuid(), roomId, userId, sender.DisplayName, targetUserId, type, emoji, DateTimeOffset.UtcNow));
     }
 
+    public async Task<SocialResult<IReadOnlyList<Guid>>> GetHumanAudienceAsync(Guid roomId, CancellationToken ct)
+    {
+        if (roomId == Guid.Empty) return SocialResult<IReadOnlyList<Guid>>.Failure("invalid_room", "RoomId không hợp lệ.");
+        var room = await roomAccess.GetRoomAsync(roomId, ct);
+        if (room is null) return SocialResult<IReadOnlyList<Guid>>.Failure("room_not_found", "Không tìm thấy phòng.");
+        return SocialResult<IReadOnlyList<Guid>>.Success(room.Members.Where(x => !x.IsBot).Select(x => x.UserId).Distinct().ToArray());
+    }
+
     private async Task<SocialResult<SocialAccess>> RequireHumanMemberAsync(Guid roomId, Guid userId, CancellationToken ct)
     {
         if (roomId == Guid.Empty) return SocialResult<SocialAccess>.Failure("invalid_room", "RoomId không hợp lệ.");
