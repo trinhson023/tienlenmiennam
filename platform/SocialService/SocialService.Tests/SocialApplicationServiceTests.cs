@@ -7,6 +7,7 @@ public sealed class SocialApplicationServiceTests
     private static readonly Guid RoomId = Guid.NewGuid();
     private static readonly Guid AliceId = Guid.NewGuid();
     private static readonly Guid BobId = Guid.NewGuid();
+    private static readonly Guid BotId = Guid.NewGuid();
 
     [Fact]
     public async Task QuickChat_UsesCanonicalRoomIdentityAndNormalizesText()
@@ -39,11 +40,24 @@ public sealed class SocialApplicationServiceTests
         Assert.True((await service.CreateReactionAsync(RoomId, AliceId, "bomb", BobId, CancellationToken.None)).IsSuccess);
     }
 
+    [Fact]
+    public async Task Audience_ContainsCurrentHumansOnly()
+    {
+        var service = new SocialApplicationService(new FakeRooms(), new FakeHistory());
+        var result = await service.GetHumanAudienceAsync(RoomId, CancellationToken.None);
+        Assert.True(result.IsSuccess);
+        Assert.Equal(new[] { AliceId, BobId }, result.Value);
+    }
+
     private sealed class FakeRooms : IRoomAccessGateway
     {
         public Task<RoomSocialContext?> GetRoomAsync(Guid roomId, CancellationToken cancellationToken) => Task.FromResult<RoomSocialContext?>(
             roomId == RoomId
-                ? new RoomSocialContext(RoomId, "InGame", [new RoomSocialMember(AliceId, "alice", "Alice", false), new RoomSocialMember(BobId, "bob", "Bob", false)])
+                ? new RoomSocialContext(RoomId, "InGame", [
+                    new RoomSocialMember(AliceId, "alice", "Alice", false),
+                    new RoomSocialMember(BobId, "bob", "Bob", false),
+                    new RoomSocialMember(BotId, "bot", "Bot", true)
+                ])
                 : null);
     }
 
