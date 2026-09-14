@@ -8,8 +8,16 @@ public static class MediaEndpoints
     public static IEndpointRouteBuilder MapMediaEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api").RequireAuthorization();
-        group.MapGet("/search", async (string? q, MediaApplicationService media, CancellationToken ct) => Map(await media.SearchAsync(q, false, ct)));
-        group.MapGet("/shorts", async (string? q, MediaApplicationService media, CancellationToken ct) => Map(await media.SearchAsync(q, true, ct)));
+        group.MapGet("/search", async (Guid roomId, string? q, ClaimsPrincipal principal, MediaApplicationService media, CancellationToken ct) =>
+        {
+            var userId = GetUserId(principal); if (userId is null) return Results.Unauthorized();
+            return Map(await media.SearchAsync(roomId, userId.Value, q, false, ct));
+        });
+        group.MapGet("/shorts", async (Guid roomId, string? q, ClaimsPrincipal principal, MediaApplicationService media, CancellationToken ct) =>
+        {
+            var userId = GetUserId(principal); if (userId is null) return Results.Unauthorized();
+            return Map(await media.SearchAsync(roomId, userId.Value, q, true, ct));
+        });
         group.MapGet("/rooms/{roomId:guid}", async (Guid roomId, ClaimsPrincipal principal, MediaApplicationService media, CancellationToken ct) =>
         {
             var userId = GetUserId(principal); if (userId is null) return Results.Unauthorized(); return Map(await media.GetStateAsync(roomId, userId.Value, ct));
