@@ -12,20 +12,51 @@ public sealed class TienLenMatchLauncher(HttpClient httpClient, IConfiguration c
     public Task<MatchLaunchResult> RematchAsync(string gameSlug, Guid previousMatchId, Guid roomId, IReadOnlyCollection<MatchLaunchPlayer> players, CancellationToken cancellationToken) =>
         SendAsync(gameSlug, $"/api/internal/matches/{previousMatchId}/rematch", roomId, players, cancellationToken);
 
+    public async Task<MatchSummaryResult> GetSummaryAsync(string gameSlug, Guid matchId, CancellationToken cancellationToken)
+    {
+        if (!string.Equals(gameSlug, "tien-len", StringComparison.OrdinalIgnoreCase))
+            return MatchSummaryResult.Failure("game_not_supported", "Game service này chưa được kết nối.");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/internal/matches/{matchId}/summary");
+        request.Headers.Add("X-Internal-Key", configuration["InternalApi:Key"] ?? "royal_game_internal_dev_key_change_me");
+        try
+        {
+            using var response = await httpClient.SendAsync(request, cancellationToken);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                return MatchSummaryResult.Failure("match_not_found", "Không tìm thấy ván chơi.");
+            if (!response.IsSuccessStatusCode)
+                return MatchSummaryResult.Failure("game_service_error", "Không đọc được trạng thái ván chơi.");
+            var payload = await response.Content.ReadFromJsonAsync<MatchSummaryResponse>(cancellationToken: cancellationToken);
+            return payload is null
+                ? MatchSummaryResult.Failure("game_service_error", "Tiến Lên Service trả dữ liệu không hợp lệ.")
+                : MatchSummaryResult.Success(payload.MatchId, payload.RoomId, payload.Status);
+        }
+        catch (HttpRequestException ex)
+        {
+            return MatchSummaryResult.Failure("game_service_unavailable", ex.Message);
+        }
+    }
+
     private async Task<MatchLaunchResult> SendAsync(string gameSlug, string path, Guid roomId, IReadOnlyCollection<MatchLaunchPlayer> players, CancellationToken cancellationToken)
     {
-        if (!string.Equals(gameSlug, "tien-len", StringComparison.OrdinalIgnoreCase)) return MatchLaunchResult.Failure("game_not_supported", "Game service này chưa được kết nối.");
+        if (!string.Equals(gameSlug, "tien-len", StringComparison.OrdinalIgnoreCase))
+            return MatchLaunchResult.Failure("game_not_supported", "Game service này chưa được kết nối.");
         using var request = new HttpRequestMessage(HttpMethod.Post, path);
         request.Headers.Add("X-Internal-Key", configuration["InternalApi:Key"] ?? "royal_game_internal_dev_key_change_me");
         request.Content = JsonContent.Create(new { roomId, players = players.Select(x => new { x.UserId, x.SeatNumber, x.Username, x.DisplayName, x.IsBot }).ToArray() });
-        try {
+        try
+        {
             using var response = await httpClient.SendAsync(request, cancellationToken);
             var payload = await response.Content.ReadFromJsonAsync<MatchLaunchResponse>(cancellationToken: cancellationToken);
             if (!response.IsSuccessStatusCode || payload is null || !payload.IsSuccess || payload.MatchId is null)
                 return MatchLaunchResult.Failure(payload?.ErrorCode ?? "game_service_error", payload?.ErrorMessage ?? "Tiến Lên Service từ chối tạo match.");
             return MatchLaunchResult.Success(payload.MatchId.Value);
-        } catch (HttpRequestException ex) { return MatchLaunchResult.Failure("game_service_unavailable", ex.Message); }
+        }
+        catch (HttpRequestException ex)
+        {
+            return MatchLaunchResult.Failure("game_service_unavailable", ex.Message);
+        }
     }
 
     private sealed record MatchLaunchResponse(bool IsSuccess, Guid? MatchId, string? ErrorCode, string? ErrorMessage);
+    private sealed record MatchSummaryResponse(Guid MatchId, Guid RoomId, string Status);
 }

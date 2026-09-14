@@ -9,6 +9,7 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddSingleton<RoomLifecycleLock>();
 builder.Services.AddScoped<LobbyApplicationService>();
 builder.Services.AddHealthChecks();
 builder.Services.AddSignalR();
@@ -37,19 +38,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
 });
 
 var app = builder.Build();
-app.UseCors();
-app.UseAuthentication();
-app.UseAuthorization();
+app.UseCors(); app.UseAuthentication(); app.UseAuthorization();
 app.MapHealthChecks("/health");
-app.MapGet("/api/status", () => Results.Ok(new { service = "LobbyService", status = "m3-lobby-ready" })).RequireAuthorization();
-app.MapLobbyEndpoints();
-app.MapHub<LobbyHub>("/hubs/lobby");
-
+app.MapGet("/api/status", () => Results.Ok(new { service = "LobbyService", status = "m7-lifecycle-ready" })).RequireAuthorization();
+app.MapLobbyEndpoints(); app.MapHub<LobbyHub>("/hubs/lobby");
 await using (var scope = app.Services.CreateAsyncScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<LobbyDbContext>();
-    await db.Database.MigrateAsync();
-    await scope.ServiceProvider.GetRequiredService<LobbySeeder>().SeedAsync();
+    var db = scope.ServiceProvider.GetRequiredService<LobbyDbContext>(); await db.Database.MigrateAsync(); await scope.ServiceProvider.GetRequiredService<LobbySeeder>().SeedAsync();
 }
-
 app.Run();

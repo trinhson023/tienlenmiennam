@@ -27,6 +27,7 @@ public sealed class Room
     public int MaxPlayers { get; private set; }
     public RoomStatus Status { get; private set; }
     public Guid? ActiveMatchId { get; private set; }
+    public Guid? LastCompletedMatchId { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset UpdatedAtUtc { get; private set; }
     public GameDefinition GameDefinition { get; private set; } = null!;
@@ -37,7 +38,6 @@ public sealed class Room
         EnsureOpen();
         if (_members.Any(x => x.UserId == userId)) throw new InvalidOperationException("Player is already in the room.");
         EnsureCapacity();
-
         var member = new RoomMember(Guid.NewGuid(), Id, userId, username, displayName, FirstFreeSeat());
         _members.Add(member);
         Touch();
@@ -48,19 +48,10 @@ public sealed class Room
     {
         EnsureOpen();
         EnsureCapacity();
-
         var seat = FirstFreeSeat();
-        var botNumber = Enumerable.Range(1, MaxPlayers)
-            .First(number => !_members.Any(x => x.IsBot && x.DisplayName == $"Bot {number}"));
+        var botNumber = Enumerable.Range(1, MaxPlayers).First(number => !_members.Any(x => x.IsBot && x.DisplayName == $"Bot {number}"));
         var botUserId = Guid.NewGuid();
-        var member = new RoomMember(
-            Guid.NewGuid(),
-            Id,
-            botUserId,
-            $"bot_{botUserId:N}"[..12],
-            $"Bot {botNumber}",
-            seat,
-            isBot: true);
+        var member = new RoomMember(Guid.NewGuid(), Id, botUserId, $"bot_{botUserId:N}"[..12], $"Bot {botNumber}", seat, isBot: true);
         _members.Add(member);
         Touch();
         return member;
@@ -81,25 +72,12 @@ public sealed class Room
         var member = _members.SingleOrDefault(x => x.UserId == userId && !x.IsBot);
         if (member is null) return false;
         _members.Remove(member);
-
         if (HostUserId == userId)
         {
-            var nextHumanHost = _members
-                .Where(x => !x.IsBot)
-                .OrderBy(x => x.JoinedAtUtc)
-                .ThenBy(x => x.SeatNumber)
-                .FirstOrDefault();
-
-            if (nextHumanHost is null)
-            {
-                _members.Clear();
-            }
-            else
-            {
-                HostUserId = nextHumanHost.UserId;
-            }
+            var nextHumanHost = _members.Where(x => !x.IsBot).OrderBy(x => x.JoinedAtUtc).ThenBy(x => x.SeatNumber).FirstOrDefault();
+            if (nextHumanHost is null) _members.Clear();
+            else HostUserId = nextHumanHost.UserId;
         }
-
         Touch();
         return true;
     }
@@ -112,8 +90,12 @@ public sealed class Room
         Touch();
     }
 
-    public void ReturnToLobby()
+    public void CompleteActiveMatch(Guid matchId)
     {
+        if (Status == RoomStatus.Open && ActiveMatchId is null && LastCompletedMatchId == matchId) return;
+        if (Status != RoomStatus.InGame || ActiveMatchId != matchId)
+            throw new InvalidOperationException("The match is not the room's active match.");
+        LastCompletedMatchId = matchId;
         ActiveMatchId = null;
         Status = RoomStatus.Open;
         Touch();
