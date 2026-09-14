@@ -22,17 +22,16 @@ public sealed class PersistentSocialHistory(IDbContextFactory<SocialDbContext> f
         });
         await db.SaveChangesAsync(cancellationToken);
 
-        var stale = await db.Messages
+        var staleIds = await db.Messages.AsNoTracking()
             .Where(x => x.RoomId == message.RoomId)
             .OrderByDescending(x => x.SentAtUtc)
             .ThenByDescending(x => x.EventId)
             .Skip(CapacityPerRoom)
+            .Select(x => x.EventId)
             .ToListAsync(cancellationToken);
-        if (stale.Count > 0)
-        {
-            db.Messages.RemoveRange(stale);
-            await db.SaveChangesAsync(cancellationToken);
-        }
+
+        if (staleIds.Count > 0)
+            await db.Messages.Where(x => staleIds.Contains(x.EventId)).ExecuteDeleteAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<SocialChatEvent>> GetRecentAsync(Guid roomId, int limit, CancellationToken cancellationToken)
