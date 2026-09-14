@@ -1,20 +1,18 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SocialService.Api;
 using SocialService.Api.Hubs;
 using SocialService.Application;
 using SocialService.Infrastructure;
+using SocialService.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddHealthChecks();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<SocialThrottle>();
-builder.Services.AddSingleton<IRecentSocialHistory, InMemorySocialHistory>();
-builder.Services.AddHttpClient("lobby", client => client.BaseAddress = new Uri(builder.Configuration["LobbyService:BaseUrl"] ?? "http://lobby-api:8080"));
-builder.Services.AddSingleton<IRoomAccessGateway>(sp => new LobbyRoomAccessGateway(
-    sp.GetRequiredService<IHttpClientFactory>().CreateClient("lobby"),
-    builder.Configuration["InternalApi:Key"] ?? "royal_game_internal_dev_key_change_me"));
 builder.Services.AddScoped<SocialApplicationService>();
 builder.Services.AddSignalR(options => options.EnableDetailedErrors = builder.Environment.IsDevelopment());
 builder.Services.AddAuthorization();
@@ -44,7 +42,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
 var app = builder.Build();
 app.UseCors(); app.UseAuthentication(); app.UseAuthorization();
 app.MapHealthChecks("/health");
-app.MapGet("/api/status", () => Results.Ok(new { service = "SocialService", status = "m8-social-phase1" })).RequireAuthorization();
+app.MapGet("/api/status", () => Results.Ok(new { service = "SocialService", status = "m8-social-persistent" })).RequireAuthorization();
 app.MapSocialEndpoints();
 app.MapHub<SocialHub>("/hubs/social");
+
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<SocialDbContext>>();
+    await using var db = await factory.CreateDbContextAsync();
+    await db.Database.MigrateAsync();
+}
+
 app.Run();

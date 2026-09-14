@@ -98,10 +98,14 @@ services:
     environment:
       ASPNETCORE_URLS: http://+:8080
       ASPNETCORE_ENVIRONMENT: Development
+      Database__Provider: Postgres
+      ConnectionStrings__RoyalDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB:-royal_game};Username=${POSTGRES_USER:-royal};Password=${POSTGRES_PASSWORD:-royal_dev}
       Jwt__Secret: ${JWT_SECRET:-CHANGE_ME_IN_REAL_ENVIRONMENT_MINIMUM_32_CHARS}
       InternalApi__Key: ${INTERNAL_API_KEY:-royal_game_internal_dev_key_change_me}
       LobbyService__BaseUrl: http://lobby-api:8080
     depends_on:
+      postgres:
+        condition: service_healthy
       lobby-api:
         condition: service_started
     ports:
