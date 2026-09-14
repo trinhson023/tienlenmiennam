@@ -10,20 +10,21 @@ public sealed class SocialHub(SocialApplicationService social, SocialThrottle th
 {
     public async Task<IReadOnlyList<SocialChatEvent>> JoinRoom(Guid roomId)
     {
-        var result = await social.GetRecentAsync(roomId, GetUserId(), 30, Context.ConnectionAborted);
+        var userId = GetUserId();
+        var result = await social.GetRecentAsync(roomId, userId, 30, Context.ConnectionAborted);
         if (!result.IsSuccess || result.Value is null) throw new HubException(result.ErrorMessage ?? "Không vào được kênh xã hội của phòng.");
-        await Groups.AddToGroupAsync(Context.ConnectionId, RoomGroup(roomId), Context.ConnectionAborted);
+        await Groups.AddToGroupAsync(Context.ConnectionId, UserRoomGroup(roomId, userId), Context.ConnectionAborted);
         return result.Value;
     }
 
-    public Task LeaveRoom(Guid roomId) => Groups.RemoveFromGroupAsync(Context.ConnectionId, RoomGroup(roomId), Context.ConnectionAborted);
+    public Task LeaveRoom(Guid roomId) => Groups.RemoveFromGroupAsync(Context.ConnectionId, UserRoomGroup(roomId, GetUserId()), Context.ConnectionAborted);
 
     public async Task SendQuickChat(Guid roomId, string text)
     {
         var userId = GetUserId(); EnforceThrottle(userId);
         var result = await social.SendQuickChatAsync(roomId, userId, text, Context.ConnectionAborted);
         if (!result.IsSuccess || result.Value is null) throw new HubException(result.ErrorMessage ?? "Không gửi được lời gáy.");
-        await Clients.Group(RoomGroup(roomId)).SendAsync("QuickChatReceived", result.Value, Context.ConnectionAborted);
+        await BroadcastToCurrentMembersAsync(roomId, "QuickChatReceived", result.Value);
     }
 
     public async Task SendRoomChat(Guid roomId, string text)
@@ -31,7 +32,7 @@ public sealed class SocialHub(SocialApplicationService social, SocialThrottle th
         var userId = GetUserId(); EnforceThrottle(userId);
         var result = await social.SendRoomChatAsync(roomId, userId, text, Context.ConnectionAborted);
         if (!result.IsSuccess || result.Value is null) throw new HubException(result.ErrorMessage ?? "Không gửi được tin nhắn.");
-        await Clients.Group(RoomGroup(roomId)).SendAsync("RoomChatReceived", result.Value, Context.ConnectionAborted);
+        await BroadcastToCurrentMembersAsync(roomId, "RoomChatReceived", result.Value);
     }
 
     public async Task ThrowReaction(Guid roomId, string reactionType, Guid targetUserId)
@@ -39,7 +40,15 @@ public sealed class SocialHub(SocialApplicationService social, SocialThrottle th
         var userId = GetUserId(); EnforceThrottle(userId);
         var result = await social.CreateReactionAsync(roomId, userId, reactionType, targetUserId, Context.ConnectionAborted);
         if (!result.IsSuccess || result.Value is null) throw new HubException(result.ErrorMessage ?? "Không ném được vật phẩm.");
-        await Clients.Group(RoomGroup(roomId)).SendAsync("ThrowReactionReceived", result.Value, Context.ConnectionAborted);
+        await BroadcastToCurrentMembersAsync(roomId, "ThrowReactionReceived", result.Value);
+    }
+
+    private async Task BroadcastToCurrentMembersAsync<T>(Guid roomId, string method, T payload)
+    {
+        var audience = await social.GetHumanAudienceAsync(roomId, Context.ConnectionAborted);
+        if (!audience.IsSuccess || audience.Value is null) throw new HubException(audience.ErrorMessage ?? "Không xác minh được thành viên phòng.");
+        foreach (var memberUserId in audience.Value)
+            await Clients.Group(UserRoomGroup(roomId, memberUserId)).SendAsync(method, payload, Context.ConnectionAborted);
     }
 
     private void EnforceThrottle(Guid userId)
@@ -54,5 +63,5 @@ public sealed class SocialHub(SocialApplicationService social, SocialThrottle th
         return userId;
     }
 
-    private static string RoomGroup(Guid roomId) => $"social:room:{roomId:N}";
+    private static string UserRoomGroup(Guid roomId, Guid userId) => $"social:room:{roomId:N}:user:{userId:N}";
 }
