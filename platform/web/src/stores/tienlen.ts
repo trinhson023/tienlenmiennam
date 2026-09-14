@@ -12,6 +12,7 @@ export interface MatchPlayerView {
   hasFinished: boolean
   finishPosition: number | null
   isSelf: boolean
+  isBot?: boolean
 }
 
 export interface MatchStateView {
@@ -20,6 +21,8 @@ export interface MatchStateView {
   version: number
   status: string
   currentPlayerUserId: string | null
+  currentPlayerIsBot?: boolean
+  turnDeadlineUtc?: string | null
   isOpeningPlay: boolean
   centerType: string | null
   center: string[]

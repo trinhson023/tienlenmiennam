@@ -10,16 +10,34 @@ const auth = useAuthStore()
 const game = useTienLenStore()
 const selected = ref<string[]>([])
 const localError = ref('')
+const secondsLeft = ref<number | null>(null)
+let timerInterval: number | null = null
 const matchId = String(route.params.matchId)
 const isMyTurn = computed(() => !!game.match && game.match.currentPlayerUserId === auth.user?.id)
 const completed = computed(() => game.match?.status === 'Completed')
 
+function updateCountdown() {
+  if (!game.match?.turnDeadlineUtc || completed.value) {
+    secondsLeft.value = null
+    return
+  }
+  const diff = Math.max(0, Math.ceil((new Date(game.match.turnDeadlineUtc).getTime() - Date.now()) / 1000))
+  secondsLeft.value = diff
+}
+
 onMounted(async () => {
-  try { await game.initialize(matchId) }
+  try {
+    await game.initialize(matchId)
+    timerInterval = window.setInterval(updateCountdown, 400)
+    updateCountdown()
+  }
   catch (e) { localError.value = e instanceof Error ? e.message : 'Không vào được ván.' }
 })
 
-onBeforeUnmount(() => { void game.leaveView() })
+onBeforeUnmount(() => {
+  if (timerInterval !== null) clearInterval(timerInterval)
+  void game.leaveView()
+})
 
 function toggle(card: string) {
   selected.value = selected.value.includes(card) ? selected.value.filter(x => x !== card) : [...selected.value, card]
@@ -41,14 +59,19 @@ async function pass() {
 <template>
   <main class="lobby-shell">
     <header class="lobby-topbar">
-      <div><span class="eyebrow">M5 · SERVER AUTHORITATIVE</span><strong>Tiến Lên Miền Nam</strong><small>Match {{ matchId.slice(0, 8) }}</small></div>
+      <div><span class="eyebrow">M6 · PERSISTENCE & TIMER</span><strong>Tiến Lên Miền Nam</strong><small>Match {{ matchId.slice(0, 8) }}</small></div>
       <button class="ghost" @click="router.push('/')">Lobby</button>
     </header>
 
     <p v-if="localError || game.error" class="error">{{ localError || game.error }}</p>
     <section v-if="game.match" class="room-panel">
       <div class="room-panel-head">
-        <div><span class="eyebrow">VERSION {{ game.match.version }}</span><h2>{{ completed ? '🏆 Ván đã kết thúc' : isMyTurn ? 'Đến lượt bạn' : 'Đang chờ đối thủ' }}</h2></div>
+        <div>
+          <span class="eyebrow">VERSION {{ game.match.version }}</span>
+          <h2>
+            {{ completed ? '🏆 Ván đã kết thúc' : isMyTurn ? `Đến lượt bạn ${secondsLeft !== null ? `(${secondsLeft}s)` : ''}` : `Đang chờ đối thủ ${secondsLeft !== null ? `(${secondsLeft}s)` : ''}` }}
+          </h2>
+        </div>
         <span class="host-badge">{{ game.match.centerType || 'OPEN' }}</span>
       </div>
 
@@ -57,6 +80,7 @@ async function pass() {
           <strong>{{ player.displayName }}</strong>
           <small>@{{ player.username }} · Ghế {{ player.seatNumber + 1 }}</small>
           <span>{{ player.hasFinished ? `#${player.finishPosition} VỀ` : `${player.cardCount} lá` }}</span>
+          <span v-if="player.isBot" class="host-badge" style="background:#6366f1;">BOT</span>
           <span v-if="game.match.currentPlayerUserId === player.userId && !completed" class="host-badge">TURN</span>
         </article>
       </div>
