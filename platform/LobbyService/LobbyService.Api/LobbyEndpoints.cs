@@ -38,8 +38,37 @@ public static class LobbyEndpoints
             if (identity is null) return Results.Unauthorized();
             var result = await service.JoinRoomAsync(roomId, identity, ct);
             if (!result.IsSuccess) return Map(result);
-            await hub.Clients.Group("lobby").SendAsync("RoomChanged", roomId, ct);
-            await hub.Clients.Group($"room:{roomId}").SendAsync("RoomUpdated", result.Value, ct);
+            await BroadcastRoomChanged(hub, roomId, result.Value!, ct);
+            return Results.Ok(result.Value);
+        });
+
+        group.MapPost("/rooms/{roomId:guid}/bots", async (Guid roomId, ClaimsPrincipal principal, LobbyApplicationService service, IHubContext<LobbyHub> hub, CancellationToken ct) =>
+        {
+            var userId = GetUserId(principal);
+            if (userId is null) return Results.Unauthorized();
+            var result = await service.AddBotAsync(roomId, userId.Value, ct);
+            if (!result.IsSuccess) return Map(result);
+            await BroadcastRoomChanged(hub, roomId, result.Value!, ct);
+            return Results.Ok(result.Value);
+        });
+
+        group.MapPost("/rooms/{roomId:guid}/bots/fill", async (Guid roomId, ClaimsPrincipal principal, LobbyApplicationService service, IHubContext<LobbyHub> hub, CancellationToken ct) =>
+        {
+            var userId = GetUserId(principal);
+            if (userId is null) return Results.Unauthorized();
+            var result = await service.FillBotsAsync(roomId, userId.Value, ct);
+            if (!result.IsSuccess) return Map(result);
+            await BroadcastRoomChanged(hub, roomId, result.Value!, ct);
+            return Results.Ok(result.Value);
+        });
+
+        group.MapDelete("/rooms/{roomId:guid}/bots/{botUserId:guid}", async (Guid roomId, Guid botUserId, ClaimsPrincipal principal, LobbyApplicationService service, IHubContext<LobbyHub> hub, CancellationToken ct) =>
+        {
+            var userId = GetUserId(principal);
+            if (userId is null) return Results.Unauthorized();
+            var result = await service.RemoveBotAsync(roomId, botUserId, userId.Value, ct);
+            if (!result.IsSuccess) return Map(result);
+            await BroadcastRoomChanged(hub, roomId, result.Value!, ct);
             return Results.Ok(result.Value);
         });
 
@@ -77,6 +106,11 @@ public static class LobbyEndpoints
         return endpoints;
     }
 
+    private static Task BroadcastRoomChanged(IHubContext<LobbyHub> hub, Guid roomId, RoomDetails room, CancellationToken ct) =>
+        Task.WhenAll(
+            hub.Clients.Group("lobby").SendAsync("RoomChanged", roomId, ct),
+            hub.Clients.Group($"room:{roomId}").SendAsync("RoomUpdated", room, ct));
+
     private static PlayerIdentity? GetIdentity(ClaimsPrincipal principal)
     {
         var id = GetUserId(principal);
@@ -95,9 +129,9 @@ public static class LobbyEndpoints
         if (result.IsSuccess) return Results.Ok(result.Value);
         var status = result.ErrorCode switch
         {
-            "room_not_found" or "game_not_found" => StatusCodes.Status404NotFound,
+            "room_not_found" or "game_not_found" or "bot_not_found" => StatusCodes.Status404NotFound,
             "host_only" or "game_not_enabled" => StatusCodes.Status403Forbidden,
-            "already_in_room" or "room_full" or "room_not_open" or "join_conflict" or "not_enough_players" or "match_in_progress" => StatusCodes.Status409Conflict,
+            "already_in_room" or "room_full" or "room_not_open" or "join_conflict" or "bot_conflict" or "not_enough_players" or "match_in_progress" => StatusCodes.Status409Conflict,
             "game_service_unavailable" or "game_service_error" => StatusCodes.Status502BadGateway,
             _ => StatusCodes.Status400BadRequest
         };

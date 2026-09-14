@@ -16,7 +16,7 @@ public sealed class TienLenMatchLauncher(HttpClient httpClient, IConfiguration c
         request.Content = JsonContent.Create(new
         {
             roomId,
-            players = players.Select(x => new { x.UserId, x.SeatNumber, x.Username, x.DisplayName }).ToArray()
+            players = players.Select(x => new { x.UserId, x.SeatNumber, x.Username, x.DisplayName, x.IsBot }).ToArray()
         });
 
         try

@@ -17,6 +17,7 @@ public sealed record RoomMemberDto(
     string DisplayName,
     int SeatNumber,
     bool IsHost,
+    bool IsBot,
     DateTimeOffset JoinedAtUtc);
 
 public sealed record RoomSummary(

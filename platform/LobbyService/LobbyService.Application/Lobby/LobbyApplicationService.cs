@@ -84,6 +84,54 @@ public sealed class LobbyApplicationService(ILobbyRepository repository, IMatchL
         return ServiceResult<RoomDetails>.Success(MapDetails(room));
     }
 
+    public async Task<ServiceResult<RoomDetails>> AddBotAsync(Guid roomId, Guid userId, CancellationToken ct)
+    {
+        var room = await repository.GetRoomAsync(roomId, ct);
+        var validation = ValidateBotMutation(room, userId);
+        if (validation is not null) return validation;
+        if (room!.Members.Count >= room.MaxPlayers) return ServiceResult<RoomDetails>.Failure("room_full", "Phòng đã đủ người.");
+
+        room.AddBot();
+        try
+        {
+            await repository.SaveChangesAsync(ct);
+        }
+        catch
+        {
+            return ServiceResult<RoomDetails>.Failure("bot_conflict", "Ghế bot vừa bị chiếm. Hãy thử lại.");
+        }
+        return ServiceResult<RoomDetails>.Success(MapDetails(room));
+    }
+
+    public async Task<ServiceResult<RoomDetails>> FillBotsAsync(Guid roomId, Guid userId, CancellationToken ct)
+    {
+        var room = await repository.GetRoomAsync(roomId, ct);
+        var validation = ValidateBotMutation(room, userId);
+        if (validation is not null) return validation;
+
+        while (room!.Members.Count < room.MaxPlayers) room.AddBot();
+        try
+        {
+            await repository.SaveChangesAsync(ct);
+        }
+        catch
+        {
+            return ServiceResult<RoomDetails>.Failure("bot_conflict", "Không thể lấp đầy bot do có thay đổi ghế đồng thời.");
+        }
+        return ServiceResult<RoomDetails>.Success(MapDetails(room));
+    }
+
+    public async Task<ServiceResult<RoomDetails>> RemoveBotAsync(Guid roomId, Guid botUserId, Guid userId, CancellationToken ct)
+    {
+        var room = await repository.GetRoomAsync(roomId, ct);
+        var validation = ValidateBotMutation(room, userId);
+        if (validation is not null) return validation;
+        if (!room!.RemoveBot(botUserId)) return ServiceResult<RoomDetails>.Failure("bot_not_found", "Không tìm thấy bot trong phòng.");
+
+        await repository.SaveChangesAsync(ct);
+        return ServiceResult<RoomDetails>.Success(MapDetails(room));
+    }
+
     public async Task<ServiceResult<RoomDetails>> StartMatchAsync(Guid roomId, Guid userId, CancellationToken ct)
     {
         var room = await repository.GetRoomAsync(roomId, ct);
@@ -94,7 +142,7 @@ public sealed class LobbyApplicationService(ILobbyRepository repository, IMatchL
             return ServiceResult<RoomDetails>.Failure("not_enough_players", $"Cần ít nhất {room.GameDefinition.MinPlayers} người để bắt đầu.");
 
         var players = room.Members.OrderBy(x => x.SeatNumber)
-            .Select(x => new MatchLaunchPlayer(x.UserId, x.SeatNumber, x.Username, x.DisplayName)).ToArray();
+            .Select(x => new MatchLaunchPlayer(x.UserId, x.SeatNumber, x.Username, x.DisplayName, x.IsBot)).ToArray();
         var launch = await matchLauncher.StartAsync(room.GameDefinition.Slug, room.Id, players, ct);
         if (!launch.IsSuccess || launch.MatchId is null)
             return ServiceResult<RoomDetails>.Failure(launch.ErrorCode ?? "game_service_unavailable", launch.ErrorMessage ?? "Không khởi tạo được ván chơi.");
@@ -122,6 +170,14 @@ public sealed class LobbyApplicationService(ILobbyRepository repository, IMatchL
         return ServiceResult<LeaveRoomResult>.Success(new LeaveRoomResult(false, MapDetails(room)));
     }
 
+    private static ServiceResult<RoomDetails>? ValidateBotMutation(Room? room, Guid userId)
+    {
+        if (room is null) return ServiceResult<RoomDetails>.Failure("room_not_found", "Không tìm thấy phòng.");
+        if (room.HostUserId != userId) return ServiceResult<RoomDetails>.Failure("host_only", "Chỉ host mới được quản lý bot.");
+        if (room.Status != RoomStatus.Open) return ServiceResult<RoomDetails>.Failure("room_not_open", "Chỉ quản lý bot khi phòng đang mở.");
+        return null;
+    }
+
     private static RoomSummary MapSummary(Room room) => new(
         room.Id, room.Name, room.GameDefinition.Slug, room.GameDefinition.DisplayName, room.GameDefinition.Icon,
         room.Members.Count, room.MaxPlayers, room.Status.ToString(), room.HostUserId, room.UpdatedAtUtc);
@@ -130,6 +186,6 @@ public sealed class LobbyApplicationService(ILobbyRepository repository, IMatchL
         room.Id, room.Name, room.GameDefinition.Slug, room.GameDefinition.DisplayName, room.GameDefinition.Icon,
         room.GameDefinition.MinPlayers, room.MaxPlayers, room.Status.ToString(), room.HostUserId, room.ActiveMatchId,
         room.Members.OrderBy(x => x.SeatNumber).Select(x => new RoomMemberDto(
-            x.UserId, x.Username, x.DisplayName, x.SeatNumber, x.UserId == room.HostUserId, x.JoinedAtUtc)).ToList(),
+            x.UserId, x.Username, x.DisplayName, x.SeatNumber, x.UserId == room.HostUserId, x.IsBot, x.JoinedAtUtc)).ToList(),
         room.CreatedAtUtc, room.UpdatedAtUtc);
 }

@@ -34,25 +34,72 @@ public sealed class Room
 
     public RoomMember Join(Guid userId, string username, string displayName)
     {
-        if (Status != RoomStatus.Open) throw new InvalidOperationException("Room is not open.");
+        EnsureOpen();
         if (_members.Any(x => x.UserId == userId)) throw new InvalidOperationException("Player is already in the room.");
-        if (_members.Count >= MaxPlayers) throw new InvalidOperationException("Room is full.");
+        EnsureCapacity();
 
-        var occupied = _members.Select(x => x.SeatNumber).ToHashSet();
-        var seat = Enumerable.Range(0, MaxPlayers).First(x => !occupied.Contains(x));
-        var member = new RoomMember(Guid.NewGuid(), Id, userId, username, displayName, seat);
+        var member = new RoomMember(Guid.NewGuid(), Id, userId, username, displayName, FirstFreeSeat());
         _members.Add(member);
         Touch();
         return member;
     }
 
+    public RoomMember AddBot()
+    {
+        EnsureOpen();
+        EnsureCapacity();
+
+        var seat = FirstFreeSeat();
+        var botNumber = Enumerable.Range(1, MaxPlayers)
+            .First(number => !_members.Any(x => x.IsBot && x.DisplayName == $"Bot {number}"));
+        var botUserId = Guid.NewGuid();
+        var member = new RoomMember(
+            Guid.NewGuid(),
+            Id,
+            botUserId,
+            $"bot_{botUserId:N}"[..12],
+            $"Bot {botNumber}",
+            seat,
+            isBot: true);
+        _members.Add(member);
+        Touch();
+        return member;
+    }
+
+    public bool RemoveBot(Guid botUserId)
+    {
+        EnsureOpen();
+        var bot = _members.SingleOrDefault(x => x.UserId == botUserId && x.IsBot);
+        if (bot is null) return false;
+        _members.Remove(bot);
+        Touch();
+        return true;
+    }
+
     public bool Leave(Guid userId)
     {
-        var member = _members.SingleOrDefault(x => x.UserId == userId);
+        var member = _members.SingleOrDefault(x => x.UserId == userId && !x.IsBot);
         if (member is null) return false;
         _members.Remove(member);
-        if (_members.Count > 0 && HostUserId == userId)
-            HostUserId = _members.OrderBy(x => x.JoinedAtUtc).ThenBy(x => x.SeatNumber).First().UserId;
+
+        if (HostUserId == userId)
+        {
+            var nextHumanHost = _members
+                .Where(x => !x.IsBot)
+                .OrderBy(x => x.JoinedAtUtc)
+                .ThenBy(x => x.SeatNumber)
+                .FirstOrDefault();
+
+            if (nextHumanHost is null)
+            {
+                _members.Clear();
+            }
+            else
+            {
+                HostUserId = nextHumanHost.UserId;
+            }
+        }
+
         Touch();
         return true;
     }
@@ -70,6 +117,22 @@ public sealed class Room
         ActiveMatchId = null;
         Status = RoomStatus.Open;
         Touch();
+    }
+
+    private int FirstFreeSeat()
+    {
+        var occupied = _members.Select(x => x.SeatNumber).ToHashSet();
+        return Enumerable.Range(0, MaxPlayers).First(x => !occupied.Contains(x));
+    }
+
+    private void EnsureOpen()
+    {
+        if (Status != RoomStatus.Open) throw new InvalidOperationException("Room is not open.");
+    }
+
+    private void EnsureCapacity()
+    {
+        if (_members.Count >= MaxPlayers) throw new InvalidOperationException("Room is full.");
     }
 
     private void Touch() => UpdatedAtUtc = DateTimeOffset.UtcNow;

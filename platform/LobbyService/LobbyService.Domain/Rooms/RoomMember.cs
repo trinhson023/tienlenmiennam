@@ -4,7 +4,7 @@ public sealed class RoomMember
 {
     private RoomMember() { }
 
-    public RoomMember(Guid id, Guid roomId, Guid userId, string username, string displayName, int seatNumber)
+    public RoomMember(Guid id, Guid roomId, Guid userId, string username, string displayName, int seatNumber, bool isBot = false)
     {
         Id = id;
         RoomId = roomId;
@@ -12,6 +12,7 @@ public sealed class RoomMember
         Username = username.Trim();
         DisplayName = displayName.Trim();
         SeatNumber = seatNumber;
+        IsBot = isBot;
         JoinedAtUtc = DateTimeOffset.UtcNow;
     }
 
@@ -21,6 +22,7 @@ public sealed class RoomMember
     public string Username { get; private set; } = string.Empty;
     public string DisplayName { get; private set; } = string.Empty;
     public int SeatNumber { get; private set; }
+    public bool IsBot { get; private set; }
     public DateTimeOffset JoinedAtUtc { get; private set; }
     public Room Room { get; private set; } = null!;
 }

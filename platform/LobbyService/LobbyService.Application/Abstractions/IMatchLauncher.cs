@@ -1,6 +1,6 @@
 namespace LobbyService.Application.Abstractions;
 
-public sealed record MatchLaunchPlayer(Guid UserId, int SeatNumber, string Username, string DisplayName);
+public sealed record MatchLaunchPlayer(Guid UserId, int SeatNumber, string Username, string DisplayName, bool IsBot);
 public sealed record MatchLaunchResult(bool IsSuccess, Guid? MatchId, string? ErrorCode, string? ErrorMessage)
 {
     public static MatchLaunchResult Success(Guid matchId) => new(true, matchId, null, null);

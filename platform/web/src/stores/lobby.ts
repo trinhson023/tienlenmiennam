@@ -4,7 +4,7 @@ import { createLobbyHub } from '@/core/realtime/lobbyHub'
 import type { HubConnection } from '@microsoft/signalr'
 
 export interface GameCatalogItem { slug: string; displayName: string; icon: string; minPlayers: number; maxPlayers: number; isEnabled: boolean }
-export interface RoomMember { userId: string; username: string; displayName: string; seatNumber: number; isHost: boolean; joinedAtUtc: string }
+export interface RoomMember { userId: string; username: string; displayName: string; seatNumber: number; isHost: boolean; isBot: boolean; joinedAtUtc: string }
 export interface RoomDetails { id: string; name: string; gameSlug: string; gameName: string; gameIcon: string; minPlayers: number; maxPlayers: number; status: string; hostUserId: string; activeMatchId: string | null; members: RoomMember[]; createdAtUtc: string; updatedAtUtc: string }
 export interface RoomSummary { id: string; name: string; gameSlug: string; gameName: string; gameIcon: string; playerCount: number; maxPlayers: number; status: string; hostUserId: string; updatedAtUtc: string }
 
@@ -16,6 +16,9 @@ export const useLobbyStore = defineStore('lobby', {
     async loadRoom(roomId: string) { const { data } = await api.get<RoomDetails>(`/api/lobby/rooms/${roomId}`); this.currentRoom = data; return data },
     async createRoom(name: string, maxPlayers?: number) { this.busy = true; try { const { data } = await api.post<RoomDetails>('/api/lobby/rooms', { gameSlug: this.selectedGame, name: name || null, maxPlayers: maxPlayers || null }); this.currentRoom = data; await this.subscribeRoom(data.id); await this.loadRooms(); return data } finally { this.busy = false } },
     async joinRoom(roomId: string) { this.busy = true; try { const { data } = await api.post<RoomDetails>(`/api/lobby/rooms/${roomId}/join`); this.currentRoom = data; await this.subscribeRoom(roomId); await this.loadRooms(); return data } finally { this.busy = false } },
+    async addBot() { if (!this.currentRoom) return null; this.busy = true; try { const { data } = await api.post<RoomDetails>(`/api/lobby/rooms/${this.currentRoom.id}/bots`); this.currentRoom = data; return data } finally { this.busy = false } },
+    async fillBots() { if (!this.currentRoom) return null; this.busy = true; try { const { data } = await api.post<RoomDetails>(`/api/lobby/rooms/${this.currentRoom.id}/bots/fill`); this.currentRoom = data; return data } finally { this.busy = false } },
+    async removeBot(botUserId: string) { if (!this.currentRoom) return null; this.busy = true; try { const { data } = await api.delete<RoomDetails>(`/api/lobby/rooms/${this.currentRoom.id}/bots/${botUserId}`); this.currentRoom = data; return data } finally { this.busy = false } },
     async startCurrentMatch() { if (!this.currentRoom) return null; this.busy = true; try { const { data } = await api.post<RoomDetails>(`/api/lobby/rooms/${this.currentRoom.id}/start`); this.currentRoom = data; return data } finally { this.busy = false } },
     async leaveCurrentRoom() { if (!this.currentRoom) return; const roomId = this.currentRoom.id; this.busy = true; try { await api.post(`/api/lobby/rooms/${roomId}/leave`); await this.unsubscribeRoom(roomId); this.currentRoom = null; await this.loadRooms() } finally { this.busy = false } },
     async changeGame(slug: string) { this.selectedGame = slug; await this.loadRooms() },

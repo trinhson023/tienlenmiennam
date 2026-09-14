@@ -47,6 +47,7 @@ public sealed class LobbyDbContext(DbContextOptions<LobbyDbContext> options) : D
             entity.Property(x => x.Id).ValueGeneratedNever();
             entity.Property(x => x.Username).HasMaxLength(32).IsRequired();
             entity.Property(x => x.DisplayName).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.IsBot).HasDefaultValue(false);
             entity.HasIndex(x => new { x.RoomId, x.UserId }).IsUnique();
             entity.HasIndex(x => new { x.RoomId, x.SeatNumber }).IsUnique();
             entity.HasIndex(x => x.UserId);

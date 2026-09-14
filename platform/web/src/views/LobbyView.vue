@@ -13,7 +13,9 @@ const error = ref('')
 const enabledGames = computed(() => lobby.games.filter(x => x.isEnabled))
 const selectedGame = computed(() => lobby.games.find(x => x.slug === lobby.selectedGame))
 const isHost = computed(() => !!lobby.currentRoom && lobby.currentRoom.hostUserId === auth.user?.id)
-const canStart = computed(() => !!lobby.currentRoom && isHost.value && lobby.currentRoom.status === 'Open' && lobby.currentRoom.members.length >= lobby.currentRoom.minPlayers)
+const isRoomOpen = computed(() => lobby.currentRoom?.status === 'Open')
+const hasEmptySeat = computed(() => !!lobby.currentRoom && lobby.currentRoom.members.length < lobby.currentRoom.maxPlayers)
+const canStart = computed(() => !!lobby.currentRoom && isHost.value && isRoomOpen.value && lobby.currentRoom.members.length >= lobby.currentRoom.minPlayers)
 
 watch(() => lobby.currentRoom?.activeMatchId, matchId => {
   if (matchId) void router.push(`/games/tien-len/${matchId}`)
@@ -24,9 +26,16 @@ onMounted(async () => {
   catch (e) { error.value = axios.isAxiosError(e) ? (e.response?.data?.message || 'Không tải được lobby.') : 'Không tải được lobby.' }
 })
 
-async function createRoom() { error.value = ''; try { await lobby.createRoom(roomName.value, selectedGame.value?.maxPlayers) } catch (e) { error.value = axios.isAxiosError(e) ? (e.response?.data?.message || 'Không tạo được phòng.') : 'Không tạo được phòng.' } }
-async function join(roomId: string) { error.value = ''; try { await lobby.joinRoom(roomId) } catch (e) { error.value = axios.isAxiosError(e) ? (e.response?.data?.message || 'Không vào được phòng.') : 'Không vào được phòng.' } }
-async function startMatch() { error.value = ''; try { await lobby.startCurrentMatch() } catch (e) { error.value = axios.isAxiosError(e) ? (e.response?.data?.message || 'Không bắt đầu được ván.') : 'Không bắt đầu được ván.' } }
+function messageFrom(e: unknown, fallback: string) {
+  return axios.isAxiosError(e) ? (e.response?.data?.message || fallback) : fallback
+}
+
+async function createRoom() { error.value = ''; try { await lobby.createRoom(roomName.value, selectedGame.value?.maxPlayers) } catch (e) { error.value = messageFrom(e, 'Không tạo được phòng.') } }
+async function join(roomId: string) { error.value = ''; try { await lobby.joinRoom(roomId) } catch (e) { error.value = messageFrom(e, 'Không vào được phòng.') } }
+async function addBot() { error.value = ''; try { await lobby.addBot() } catch (e) { error.value = messageFrom(e, 'Không thêm được bot.') } }
+async function fillBots() { error.value = ''; try { await lobby.fillBots() } catch (e) { error.value = messageFrom(e, 'Không lấp đầy bot được.') } }
+async function removeBot(botUserId: string) { error.value = ''; try { await lobby.removeBot(botUserId) } catch (e) { error.value = messageFrom(e, 'Không xóa được bot.') } }
+async function startMatch() { error.value = ''; try { await lobby.startCurrentMatch() } catch (e) { error.value = messageFrom(e, 'Không bắt đầu được ván.') } }
 async function logout() { await auth.logout(); await router.push('/login') }
 </script>
 
@@ -36,9 +45,30 @@ async function logout() { await auth.logout(); await router.push('/login') }
     <section class="game-catalog"><button v-for="gameItem in lobby.games" :key="gameItem.slug" class="game-tile" :class="{ active: lobby.selectedGame === gameItem.slug, disabled: !gameItem.isEnabled }" :disabled="!gameItem.isEnabled" @click="lobby.changeGame(gameItem.slug)"><span>{{ gameItem.icon }}</span><div><b>{{ gameItem.displayName }}</b><small>{{ gameItem.isEnabled ? `${gameItem.minPlayers}-${gameItem.maxPlayers} người` : 'Sắp ra mắt' }}</small></div></button></section>
     <p v-if="error" class="error">{{ error }}</p>
     <section v-if="lobby.currentRoom" class="room-panel">
-      <div class="room-panel-head"><div><span class="eyebrow">ĐANG Ở PHÒNG</span><h2>{{ lobby.currentRoom.name }}</h2></div><div class="game-actions"><button v-if="isHost" class="primary" :disabled="!canStart || lobby.busy" @click="startMatch">Bắt đầu ván</button><button class="danger" :disabled="lobby.busy || lobby.currentRoom.status !== 'Open'" @click="lobby.leaveCurrentRoom">Rời phòng</button></div></div>
-      <div class="seat-grid"><article v-for="seat in lobby.currentRoom.maxPlayers" :key="seat" class="seat-card"><template v-if="lobby.currentRoom.members.find(x => x.seatNumber === seat - 1)"><strong>{{ lobby.currentRoom.members.find(x => x.seatNumber === seat - 1)?.displayName }}</strong><small>@{{ lobby.currentRoom.members.find(x => x.seatNumber === seat - 1)?.username }}</small><span v-if="lobby.currentRoom.members.find(x => x.seatNumber === seat - 1)?.isHost" class="host-badge">HOST</span></template><template v-else><span class="empty-seat">Ghế trống {{ seat }}</span></template></article></div>
-      <p class="muted">{{ canStart ? 'Đủ người. Host có thể bắt đầu ván.' : `Cần tối thiểu ${lobby.currentRoom.minPlayers} người. Khi start, cả phòng sẽ vào Match realtime.` }}</p>
+      <div class="room-panel-head">
+        <div><span class="eyebrow">ĐANG Ở PHÒNG</span><h2>{{ lobby.currentRoom.name }}</h2></div>
+        <div class="game-actions">
+          <button v-if="isHost && isRoomOpen" class="ghost" :disabled="lobby.busy || !hasEmptySeat" @click="addBot">+ Bot</button>
+          <button v-if="isHost && isRoomOpen" class="ghost" :disabled="lobby.busy || !hasEmptySeat" @click="fillBots">Fill Bots</button>
+          <button v-if="isHost" class="primary" :disabled="!canStart || lobby.busy" @click="startMatch">Bắt đầu ván</button>
+          <button class="danger" :disabled="lobby.busy || !isRoomOpen" @click="lobby.leaveCurrentRoom">Rời phòng</button>
+        </div>
+      </div>
+      <div class="seat-grid">
+        <article v-for="seat in lobby.currentRoom.maxPlayers" :key="seat" class="seat-card">
+          <template v-if="lobby.currentRoom.members.find(x => x.seatNumber === seat - 1) as member">
+            <strong>{{ member.displayName }}</strong>
+            <small>{{ member.isBot ? 'Server Bot' : `@${member.username}` }} · Ghế {{ seat }}</small>
+            <div class="game-actions">
+              <span v-if="member.isHost" class="host-badge">HOST</span>
+              <span v-if="member.isBot" class="host-badge" style="background:#6366f1;">BOT</span>
+              <button v-if="isHost && isRoomOpen && member.isBot" class="ghost" :disabled="lobby.busy" @click="removeBot(member.userId)">Xóa</button>
+            </div>
+          </template>
+          <template v-else><span class="empty-seat">Ghế trống {{ seat }}</span></template>
+        </article>
+      </div>
+      <p class="muted">{{ canStart ? 'Đủ người. Host có thể bắt đầu ván; bot sẽ chơi hoàn toàn phía server.' : `Cần tối thiểu ${lobby.currentRoom.minPlayers} người. Host có thể thêm bot vào ghế trống.` }}</p>
     </section>
     <template v-else>
       <section class="lobby-actions"><div><span class="eyebrow">{{ selectedGame?.displayName || 'GAME' }}</span><h1>Chọn một bàn</h1><p class="muted">Room metadata lưu PostgreSQL; gameplay Tiến Lên chạy server-authoritative qua SignalR.</p></div><form class="create-room" @submit.prevent="createRoom"><input v-model.trim="roomName" maxlength="60" placeholder="Tên bàn (để trống cũng được)" /><button class="primary" :disabled="lobby.busy || enabledGames.length === 0">+ Tạo bàn</button></form></section>
