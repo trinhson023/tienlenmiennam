@@ -20,16 +20,61 @@ public sealed class LobbyApplicationService(ILobbyRepository repository, IMatchL
         var room = new Room(Guid.NewGuid(), game.Id, player.UserId, name, maxPlayers, player.Username, player.DisplayName); await repository.AddRoomAsync(room, ct); await repository.SaveChangesAsync(ct); var persisted = await repository.GetRoomAsync(room.Id, ct) ?? room; return ServiceResult<RoomDetails>.Success(MapDetails(persisted));
     }
 
-    public async Task<ServiceResult<RoomDetails>> JoinRoomAsync(Guid roomId, PlayerIdentity player, CancellationToken ct)
+    public Task<ServiceResult<RoomDetails>> JoinRoomAsync(Guid roomId, PlayerIdentity player, CancellationToken ct) => lifecycleLock.ExecuteAsync(roomId, async () =>
     {
-        var currentRoom = await repository.GetRoomForUserAsync(player.UserId, ct); if (currentRoom is not null) { if (currentRoom.Id == roomId) return ServiceResult<RoomDetails>.Success(MapDetails(currentRoom)); return ServiceResult<RoomDetails>.Failure("already_in_room", "Bạn đang ở trong một phòng khác."); }
-        var room = await repository.GetRoomAsync(roomId, ct); if (room is null) return ServiceResult<RoomDetails>.Failure("room_not_found", "Không tìm thấy phòng."); if (room.Status != RoomStatus.Open) return ServiceResult<RoomDetails>.Failure("room_not_open", "Phòng đã bắt đầu ván hoặc đã đóng."); if (room.Members.Count >= room.MaxPlayers) return ServiceResult<RoomDetails>.Failure("room_full", "Phòng đã đủ người.");
-        room.Join(player.UserId, player.Username, player.DisplayName); try { await repository.SaveChangesAsync(ct); } catch { return ServiceResult<RoomDetails>.Failure("join_conflict", "Có người vừa chiếm ghế này. Hãy thử lại."); } return ServiceResult<RoomDetails>.Success(MapDetails(room));
-    }
+        var currentRoom = await repository.GetRoomForUserAsync(player.UserId, ct);
+        if (currentRoom is not null)
+        {
+            if (currentRoom.Id == roomId) return ServiceResult<RoomDetails>.Success(MapDetails(currentRoom));
+            return ServiceResult<RoomDetails>.Failure("already_in_room", "Bạn đang ở trong một phòng khác.");
+        }
 
-    public async Task<ServiceResult<RoomDetails>> AddBotAsync(Guid roomId, Guid userId, CancellationToken ct) { var room = await repository.GetRoomAsync(roomId, ct); var validation = ValidateBotMutation(room, userId); if (validation is not null) return validation; if (room!.Members.Count >= room.MaxPlayers) return ServiceResult<RoomDetails>.Failure("room_full", "Phòng đã đủ người."); room.AddBot(); try { await repository.SaveChangesAsync(ct); } catch { return ServiceResult<RoomDetails>.Failure("bot_conflict", "Ghế bot vừa bị chiếm. Hãy thử lại."); } return ServiceResult<RoomDetails>.Success(MapDetails(room)); }
-    public async Task<ServiceResult<RoomDetails>> FillBotsAsync(Guid roomId, Guid userId, CancellationToken ct) { var room = await repository.GetRoomAsync(roomId, ct); var validation = ValidateBotMutation(room, userId); if (validation is not null) return validation; while (room!.Members.Count < room.MaxPlayers) room.AddBot(); try { await repository.SaveChangesAsync(ct); } catch { return ServiceResult<RoomDetails>.Failure("bot_conflict", "Không thể lấp đầy bot do có thay đổi ghế đồng thời."); } return ServiceResult<RoomDetails>.Success(MapDetails(room)); }
-    public async Task<ServiceResult<RoomDetails>> RemoveBotAsync(Guid roomId, Guid botUserId, Guid userId, CancellationToken ct) { var room = await repository.GetRoomAsync(roomId, ct); var validation = ValidateBotMutation(room, userId); if (validation is not null) return validation; if (!room!.RemoveBot(botUserId)) return ServiceResult<RoomDetails>.Failure("bot_not_found", "Không tìm thấy bot trong phòng."); await repository.SaveChangesAsync(ct); return ServiceResult<RoomDetails>.Success(MapDetails(room)); }
+        var room = await repository.GetRoomAsync(roomId, ct);
+        if (room is null) return ServiceResult<RoomDetails>.Failure("room_not_found", "Không tìm thấy phòng.");
+        if (room.Status != RoomStatus.Open) return ServiceResult<RoomDetails>.Failure("room_not_open", "Phòng đã bắt đầu ván hoặc đã đóng.");
+        if (room.Members.Count >= room.MaxPlayers) return ServiceResult<RoomDetails>.Failure("room_full", "Phòng đã đủ người.");
+
+        room.Join(player.UserId, player.Username, player.DisplayName);
+        try { await repository.SaveChangesAsync(ct); }
+        catch { return ServiceResult<RoomDetails>.Failure("join_conflict", "Có người vừa chiếm ghế này. Hãy thử lại."); }
+        return ServiceResult<RoomDetails>.Success(MapDetails(room));
+    }, ct);
+
+    public Task<ServiceResult<RoomDetails>> AddBotAsync(Guid roomId, Guid userId, CancellationToken ct) => lifecycleLock.ExecuteAsync(roomId, async () =>
+    {
+        var room = await repository.GetRoomAsync(roomId, ct);
+        var validation = ValidateBotMutation(room, userId);
+        if (validation is not null) return validation;
+        if (room!.Members.Count >= room.MaxPlayers) return ServiceResult<RoomDetails>.Failure("room_full", "Phòng đã đủ người.");
+
+        room.AddBot();
+        try { await repository.SaveChangesAsync(ct); }
+        catch { return ServiceResult<RoomDetails>.Failure("bot_conflict", "Ghế bot vừa bị chiếm. Hãy thử lại."); }
+        return ServiceResult<RoomDetails>.Success(MapDetails(room));
+    }, ct);
+
+    public Task<ServiceResult<RoomDetails>> FillBotsAsync(Guid roomId, Guid userId, CancellationToken ct) => lifecycleLock.ExecuteAsync(roomId, async () =>
+    {
+        var room = await repository.GetRoomAsync(roomId, ct);
+        var validation = ValidateBotMutation(room, userId);
+        if (validation is not null) return validation;
+
+        while (room!.Members.Count < room.MaxPlayers) room.AddBot();
+        try { await repository.SaveChangesAsync(ct); }
+        catch { return ServiceResult<RoomDetails>.Failure("bot_conflict", "Không thể lấp đầy bot do có thay đổi ghế đồng thời."); }
+        return ServiceResult<RoomDetails>.Success(MapDetails(room));
+    }, ct);
+
+    public Task<ServiceResult<RoomDetails>> RemoveBotAsync(Guid roomId, Guid botUserId, Guid userId, CancellationToken ct) => lifecycleLock.ExecuteAsync(roomId, async () =>
+    {
+        var room = await repository.GetRoomAsync(roomId, ct);
+        var validation = ValidateBotMutation(room, userId);
+        if (validation is not null) return validation;
+        if (!room!.RemoveBot(botUserId)) return ServiceResult<RoomDetails>.Failure("bot_not_found", "Không tìm thấy bot trong phòng.");
+
+        await repository.SaveChangesAsync(ct);
+        return ServiceResult<RoomDetails>.Success(MapDetails(room));
+    }, ct);
 
     public Task<ServiceResult<RoomDetails>> StartMatchAsync(Guid roomId, Guid userId, CancellationToken ct) => lifecycleLock.ExecuteAsync(roomId, async () =>
     {
@@ -75,12 +120,23 @@ public sealed class LobbyApplicationService(ILobbyRepository repository, IMatchL
         room.AttachMatch(launch.MatchId.Value); await repository.SaveChangesAsync(ct); return ServiceResult<RoomDetails>.Success(MapDetails(room));
     }, ct);
 
-    public async Task<ServiceResult<LeaveRoomResult>> LeaveRoomAsync(Guid roomId, Guid userId, CancellationToken ct)
+    public Task<ServiceResult<LeaveRoomResult>> LeaveRoomAsync(Guid roomId, Guid userId, CancellationToken ct) => lifecycleLock.ExecuteAsync(roomId, async () =>
     {
-        var room = await repository.GetRoomAsync(roomId, ct); if (room is null) return ServiceResult<LeaveRoomResult>.Failure("room_not_found", "Không tìm thấy phòng."); if (room.Status == RoomStatus.InGame) return ServiceResult<LeaveRoomResult>.Failure("match_in_progress", "Không thể rời phòng khi ván đang diễn ra."); if (!room.Leave(userId)) return ServiceResult<LeaveRoomResult>.Failure("not_in_room", "Bạn không ở trong phòng này.");
-        if (room.Members.Count == 0) { repository.RemoveRoom(room); await repository.SaveChangesAsync(ct); return ServiceResult<LeaveRoomResult>.Success(new LeaveRoomResult(true, null)); }
-        await repository.SaveChangesAsync(ct); return ServiceResult<LeaveRoomResult>.Success(new LeaveRoomResult(false, MapDetails(room)));
-    }
+        var room = await repository.GetRoomAsync(roomId, ct);
+        if (room is null) return ServiceResult<LeaveRoomResult>.Failure("room_not_found", "Không tìm thấy phòng.");
+        if (room.Status == RoomStatus.InGame) return ServiceResult<LeaveRoomResult>.Failure("match_in_progress", "Không thể rời phòng khi ván đang diễn ra.");
+        if (!room.Leave(userId)) return ServiceResult<LeaveRoomResult>.Failure("not_in_room", "Bạn không ở trong phòng này.");
+
+        if (room.Members.Count == 0)
+        {
+            repository.RemoveRoom(room);
+            await repository.SaveChangesAsync(ct);
+            return ServiceResult<LeaveRoomResult>.Success(new LeaveRoomResult(true, null));
+        }
+
+        await repository.SaveChangesAsync(ct);
+        return ServiceResult<LeaveRoomResult>.Success(new LeaveRoomResult(false, MapDetails(room)));
+    }, ct);
 
     private static MatchLaunchPlayer[] BuildLaunchPlayers(Room room) => room.Members.OrderBy(x => x.SeatNumber).Select(x => new MatchLaunchPlayer(x.UserId, x.SeatNumber, x.Username, x.DisplayName, x.IsBot)).ToArray();
     private static ServiceResult<RoomDetails>? ValidateBotMutation(Room? room, Guid userId) { if (room is null) return ServiceResult<RoomDetails>.Failure("room_not_found", "Không tìm thấy phòng."); if (room.HostUserId != userId) return ServiceResult<RoomDetails>.Failure("host_only", "Chỉ host mới được quản lý bot."); if (room.Status != RoomStatus.Open) return ServiceResult<RoomDetails>.Failure("room_not_open", "Chỉ quản lý bot khi phòng đang mở."); return null; }
