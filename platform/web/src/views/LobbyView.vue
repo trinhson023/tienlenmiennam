@@ -26,6 +26,10 @@ onMounted(async () => {
   catch (e) { error.value = axios.isAxiosError(e) ? (e.response?.data?.message || 'Không tải được lobby.') : 'Không tải được lobby.' }
 })
 
+function memberAt(seatIndex: number) {
+  return lobby.currentRoom?.members.find(x => x.seatNumber === seatIndex)
+}
+
 function messageFrom(e: unknown, fallback: string) {
   return axios.isAxiosError(e) ? (e.response?.data?.message || fallback) : fallback
 }
@@ -56,13 +60,13 @@ async function logout() { await auth.logout(); await router.push('/login') }
       </div>
       <div class="seat-grid">
         <article v-for="seat in lobby.currentRoom.maxPlayers" :key="seat" class="seat-card">
-          <template v-if="lobby.currentRoom.members.find(x => x.seatNumber === seat - 1) as member">
-            <strong>{{ member.displayName }}</strong>
-            <small>{{ member.isBot ? 'Server Bot' : `@${member.username}` }} · Ghế {{ seat }}</small>
+          <template v-if="memberAt(seat - 1)">
+            <strong>{{ memberAt(seat - 1)!.displayName }}</strong>
+            <small>{{ memberAt(seat - 1)!.isBot ? 'Server Bot' : `@${memberAt(seat - 1)!.username}` }} · Ghế {{ seat }}</small>
             <div class="game-actions">
-              <span v-if="member.isHost" class="host-badge">HOST</span>
-              <span v-if="member.isBot" class="host-badge" style="background:#6366f1;">BOT</span>
-              <button v-if="isHost && isRoomOpen && member.isBot" class="ghost" :disabled="lobby.busy" @click="removeBot(member.userId)">Xóa</button>
+              <span v-if="memberAt(seat - 1)!.isHost" class="host-badge">HOST</span>
+              <span v-if="memberAt(seat - 1)!.isBot" class="host-badge" style="background:#6366f1;">BOT</span>
+              <button v-if="isHost && isRoomOpen && memberAt(seat - 1)!.isBot" class="ghost" :disabled="lobby.busy" @click="removeBot(memberAt(seat - 1)!.userId)">Xóa</button>
             </div>
           </template>
           <template v-else><span class="empty-seat">Ghế trống {{ seat }}</span></template>
