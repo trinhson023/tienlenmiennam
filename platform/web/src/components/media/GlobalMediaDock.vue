@@ -106,6 +106,14 @@ async function loadYT() {
   })
 }
 
+function destroyPlayer() {
+  try { player.value?.destroy?.() } catch { /* optional */ }
+  player.value = null
+  lastVideo.value = null
+  localPosition.value = 0
+  durationSeconds.value = 0
+}
+
 async function initPlayer() {
   if (player.value || !playerHost.value) return
   try {
@@ -129,7 +137,12 @@ async function initPlayer() {
 }
 
 async function syncPlayer() {
-  if (!musicOpen.value) return
+  // Do not create an iframe before the user first opens the panel, but once a
+  // player exists keep it synchronized even while the panel is visually hidden.
+  if (!player.value && !musicOpen.value) {
+    localPosition.value = expected()
+    return
+  }
   await nextTick()
   await initPlayer()
   const p = player.value
@@ -248,7 +261,12 @@ function onShortWheel(event: WheelEvent) {
 }
 
 watch(roomId, async (next, previous) => {
-  if (previous && previous !== next) await media.leaveRoom()
+  if (previous && previous !== next) {
+    // The dock subtree is removed when no room is active. Destroy the old
+    // iframe explicitly so we never keep a stale YT.Player handle for the next room.
+    destroyPlayer()
+    await media.leaveRoom()
+  }
   if (!next) return
   await ensureLobbyContext(next)
   try {
@@ -279,7 +297,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (positionTimer !== null) window.clearInterval(positionTimer)
   void media.leaveRoom()
-  try { player.value?.destroy?.() } catch { /* optional */ }
+  destroyPlayer()
 })
 </script>
 
@@ -290,7 +308,7 @@ onBeforeUnmount(() => {
       <button type="button" @click="shortsOpen = !shortsOpen">📱 Shorts</button>
     </div>
 
-    <section v-if="musicOpen" class="media-panel music-panel">
+    <section :class="['media-panel', 'music-panel', { 'panel-hidden': !musicOpen }]" :aria-hidden="!musicOpen">
       <header>
         <b>TABLE MUSIC</b>
         <span>{{ isHost ? 'Bạn là DJ' : 'DJ: Chủ bàn' }}</span>
@@ -395,5 +413,5 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.media-dock{position:fixed;right:14px;bottom:14px;z-index:80;font-family:Inter,system-ui,sans-serif}.media-buttons{display:flex;gap:8px;justify-content:flex-end}.media-buttons button,.media-panel button{border:1px solid rgba(244,208,111,.35);background:#102c26;color:#f6e6b4;border-radius:10px;padding:8px 10px}.media-buttons button{max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.media-panel{position:absolute;right:0;bottom:46px;width:min(380px,calc(100vw - 20px));max-height:min(76vh,650px);overflow:auto;background:rgba(6,24,21,.98);border:1px solid rgba(244,208,111,.45);box-shadow:0 20px 50px #0009;border-radius:16px;padding:12px;color:#f8efd2}.media-panel header{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center}.media-panel header span{font-size:12px;opacity:.7}.yt-box,.short-frame{margin-top:10px;min-height:190px;background:#020807;border-radius:12px;display:grid;place-items:center;position:relative;overflow:hidden}.yt-player,.short-frame iframe{width:100%;height:190px;border:0}.unlock{position:absolute}.now{display:grid;gap:2px;margin:10px 0}.now small{opacity:.65}.controls,.search,.timeline{display:flex;gap:8px;align-items:center;margin-top:8px}.controls input,.timeline input{flex:1;min-width:0}.timeline span{font-size:11px;min-width:34px;text-align:center;opacity:.78}.search input{min-width:0;flex:1;background:#071c18;border:1px solid #ffffff22;color:white;border-radius:9px;padding:9px}.media-error{margin:8px 0 0;color:#ffb4ab;font-size:12px}.results{display:grid;gap:6px;margin-top:8px}.result-row{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:stretch}.result-main{display:flex;text-align:left;gap:8px;min-width:0}.result-main img{width:80px;height:45px;object-fit:cover;border-radius:6px}.result-main span{display:grid;min-width:0}.result-main b,.result-main small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.result-main b{font-size:12px}.result-main small{font-size:10px;opacity:.65}.queue-add{white-space:nowrap}.queue{display:grid;gap:5px;margin-top:10px}.queue-head{display:flex;justify-content:space-between;align-items:center}.queue-item{font-size:11px;padding:6px 8px;border-radius:8px;background:#ffffff0b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.short-frame{height:360px}.short-frame iframe{height:360px}.short-hint{display:block;margin-top:8px;opacity:.6}.shorts-controls{justify-content:space-between}@media(max-width:600px){.media-dock{right:8px;bottom:8px}.media-panel{width:calc(100vw - 16px);max-height:72vh}.short-frame,.short-frame iframe{height:50vh}.result-row{grid-template-columns:minmax(0,1fr) auto}.media-buttons button{max-width:170px}}@media(prefers-reduced-motion:reduce){.media-panel,.media-buttons button{transition:none!important}}
+.media-dock{position:fixed;right:14px;bottom:14px;z-index:80;font-family:Inter,system-ui,sans-serif}.media-buttons{display:flex;gap:8px;justify-content:flex-end}.media-buttons button,.media-panel button{border:1px solid rgba(244,208,111,.35);background:#102c26;color:#f6e6b4;border-radius:10px;padding:8px 10px}.media-buttons button{max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.media-panel{position:absolute;right:0;bottom:46px;width:min(380px,calc(100vw - 20px));max-height:min(76vh,650px);overflow:auto;background:rgba(6,24,21,.98);border:1px solid rgba(244,208,111,.45);box-shadow:0 20px 50px #0009;border-radius:16px;padding:12px;color:#f8efd2}.panel-hidden{visibility:hidden;opacity:0;pointer-events:none}.media-panel header{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center}.media-panel header span{font-size:12px;opacity:.7}.yt-box,.short-frame{margin-top:10px;min-height:190px;background:#020807;border-radius:12px;display:grid;place-items:center;position:relative;overflow:hidden}.yt-player,.short-frame iframe{width:100%;height:190px;border:0}.unlock{position:absolute}.now{display:grid;gap:2px;margin:10px 0}.now small{opacity:.65}.controls,.search,.timeline{display:flex;gap:8px;align-items:center;margin-top:8px}.controls input,.timeline input{flex:1;min-width:0}.timeline span{font-size:11px;min-width:34px;text-align:center;opacity:.78}.search input{min-width:0;flex:1;background:#071c18;border:1px solid #ffffff22;color:white;border-radius:9px;padding:9px}.media-error{margin:8px 0 0;color:#ffb4ab;font-size:12px}.results{display:grid;gap:6px;margin-top:8px}.result-row{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:stretch}.result-main{display:flex;text-align:left;gap:8px;min-width:0}.result-main img{width:80px;height:45px;object-fit:cover;border-radius:6px}.result-main span{display:grid;min-width:0}.result-main b,.result-main small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.result-main b{font-size:12px}.result-main small{font-size:10px;opacity:.65}.queue-add{white-space:nowrap}.queue{display:grid;gap:5px;margin-top:10px}.queue-head{display:flex;justify-content:space-between;align-items:center}.queue-head button{padding:4px 8px}.queue-item{font-size:11px;padding:6px 8px;border-radius:8px;background:#ffffff0b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.short-frame{height:360px}.short-frame iframe{height:360px}.short-hint{display:block;margin-top:8px;opacity:.6}.shorts-controls{justify-content:space-between}@media(max-width:600px){.media-dock{right:8px;bottom:8px}.media-panel{width:calc(100vw - 16px);max-height:72vh}.short-frame,.short-frame iframe{height:50vh}.result-row{grid-template-columns:minmax(0,1fr) auto}.media-buttons button{max-width:170px}}@media(prefers-reduced-motion:reduce){.media-panel,.media-buttons button{transition:none!important}}
 </style>
