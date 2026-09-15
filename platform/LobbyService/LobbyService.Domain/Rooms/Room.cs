@@ -67,6 +67,17 @@ public sealed class Room
         return true;
     }
 
+    public bool Kick(Guid userId)
+    {
+        EnsureOpen();
+        if (userId == HostUserId) return false;
+        var member = _members.SingleOrDefault(x => x.UserId == userId && !x.IsBot);
+        if (member is null) return false;
+        _members.Remove(member);
+        Touch();
+        return true;
+    }
+
     public bool Leave(Guid userId)
     {
         var member = _members.SingleOrDefault(x => x.UserId == userId && !x.IsBot);
