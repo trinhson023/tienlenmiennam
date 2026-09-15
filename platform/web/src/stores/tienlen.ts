@@ -27,6 +27,7 @@ export interface MatchStateView {
   isOpeningPlay: boolean
   centerType: string | null
   center: string[]
+  lastPlayedCards: string[]
   hand: string[]
   players: MatchPlayerView[]
   winnerOrder: string[]
@@ -53,6 +54,16 @@ export interface MatchThrowEvent {
   sentAtUtc: string
 }
 
+function cleanHubError(error: unknown, fallback: string) {
+  const raw = error instanceof Error ? error.message : String(error || '')
+  const marker = 'HubException:'
+  const hubIndex = raw.lastIndexOf(marker)
+  const cleaned = (hubIndex >= 0 ? raw.slice(hubIndex + marker.length) : raw)
+    .replace(/^\s*An unexpected error occurred invoking ['"][^'"]+['"] on the server\.\s*/i, '')
+    .trim()
+  return cleaned || fallback
+}
+
 export const useTienLenStore = defineStore('tienlen', {
   state: () => ({
     match: null as MatchStateView | null,
@@ -72,6 +83,7 @@ export const useTienLenStore = defineStore('tienlen', {
       const hub = createTienLenHub()
       hub.on('MatchStateUpdated', (state: MatchStateView) => {
         if (!this.currentMatchId || state.matchId === this.currentMatchId) {
+          state.lastPlayedCards ||= []
           this.match = state
           this.currentMatchId = state.matchId
           this.error = ''
@@ -123,11 +135,12 @@ export const useTienLenStore = defineStore('tienlen', {
       catch { matchJoinFailed = true }
       if (!this.match || this.match.matchId !== matchId) {
         const { data } = await api.get<MatchStateView>(`/api/tienlen/matches/${matchId}`)
+        data.lastPlayedCards ||= []
         this.match = data
       }
       if (this.match) {
         try { await this.joinSocialRoom(this.match.roomId) }
-        catch (e) { this.error = e instanceof Error ? `Social: ${e.message}` : 'Không kết nối được SocialService.' }
+        catch (e) { this.error = cleanHubError(e, 'Không kết nối được SocialService.') }
       }
       if (matchJoinFailed) throw new Error('SignalR join failed')
     },
@@ -136,8 +149,8 @@ export const useTienLenStore = defineStore('tienlen', {
       this.busy = true; this.error = ''
       try { await this.hub?.invoke('PlayCards', this.currentMatchId, cardCodes, this.match.version) }
       catch (e) {
-        this.error = e instanceof Error ? e.message : 'Không đánh được bài.'
-        try { const { data } = await api.get<MatchStateView>(`/api/tienlen/matches/${this.currentMatchId}`); this.match = data } catch { /* ignore */ }
+        this.error = cleanHubError(e, 'Không đánh được bài.')
+        try { const { data } = await api.get<MatchStateView>(`/api/tienlen/matches/${this.currentMatchId}`); data.lastPlayedCards ||= []; this.match = data } catch { /* ignore */ }
         throw e
       } finally { this.busy = false }
     },
@@ -146,8 +159,8 @@ export const useTienLenStore = defineStore('tienlen', {
       this.busy = true; this.error = ''
       try { await this.hub?.invoke('Pass', this.currentMatchId, this.match.version) }
       catch (e) {
-        this.error = e instanceof Error ? e.message : 'Không bỏ lượt được.'
-        try { const { data } = await api.get<MatchStateView>(`/api/tienlen/matches/${this.currentMatchId}`); this.match = data } catch { /* ignore */ }
+        this.error = cleanHubError(e, 'Không bỏ lượt được.')
+        try { const { data } = await api.get<MatchStateView>(`/api/tienlen/matches/${this.currentMatchId}`); data.lastPlayedCards ||= []; this.match = data } catch { /* ignore */ }
         throw e
       } finally { this.busy = false }
     },
@@ -155,13 +168,13 @@ export const useTienLenStore = defineStore('tienlen', {
       if (!this.currentRoomId) return
       this.error = ''
       try { await this.socialHub?.invoke('SendQuickChat', this.currentRoomId, text) }
-      catch (e) { this.error = e instanceof Error ? e.message : 'Không gửi được.'; throw e }
+      catch (e) { this.error = cleanHubError(e, 'Không gửi được.'); throw e }
     },
     async throwReaction(type: string, targetUserId: string) {
       if (!this.currentRoomId) return
       this.error = ''
       try { await this.socialHub?.invoke('ThrowReaction', this.currentRoomId, type, targetUserId) }
-      catch (e) { this.error = e instanceof Error ? e.message : 'Không ném được.'; throw e }
+      catch (e) { this.error = cleanHubError(e, 'Không ném được.'); throw e }
     },
     async leaveView() {
       if (this.hub?.state === 'Connected' && this.currentMatchId) {
