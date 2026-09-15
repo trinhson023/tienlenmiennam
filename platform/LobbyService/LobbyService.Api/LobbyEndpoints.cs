@@ -45,7 +45,26 @@ public static class LobbyEndpoints
             return Results.Ok(new { removed = true });
         });
         group.MapPost("/rooms/{roomId:guid}/start", async (Guid roomId, ClaimsPrincipal principal, LobbyApplicationService service, IHubContext<LobbyHub> hub, CancellationToken ct) => { var userId = GetUserId(principal); if (userId is null) return Results.Unauthorized(); var result = await service.StartMatchAsync(roomId, userId.Value, ct); if (!result.IsSuccess) return Map(result); await BroadcastMatchStarted(hub, roomId, result.Value!, ct); return Results.Ok(result.Value); });
-        group.MapPost("/rooms/{roomId:guid}/return", async (Guid roomId, ClaimsPrincipal principal, LobbyApplicationService service, IHubContext<LobbyHub> hub, CancellationToken ct) => { var userId = GetUserId(principal); if (userId is null) return Results.Unauthorized(); var result = await service.ReturnToLobbyAsync(roomId, userId.Value, ct); if (!result.IsSuccess) return Map(result); await BroadcastRoomChanged(hub, roomId, result.Value!, ct); return Results.Ok(result.Value); });
+        group.MapPost("/rooms/{roomId:guid}/return", async (Guid roomId, ClaimsPrincipal principal, LobbyApplicationService service, IHubContext<LobbyHub> hub, CancellationToken ct) =>
+        {
+            var userId = GetUserId(principal); if (userId is null) return Results.Unauthorized();
+            var result = await service.ReturnToLobbyAsync(roomId, userId.Value, ct);
+            if (!result.IsSuccess && result.ErrorCode == "match_in_progress")
+            {
+                // A stale browser may still show the completed match while another participant
+                // has already started the rematch. Return the authoritative room instead of 409;
+                // LobbyView will see InGame + ActiveMatchId and route this client to the new match.
+                var current = await service.GetRoomAsync(roomId, ct);
+                if (current.IsSuccess && current.Value is not null && string.Equals(current.Value.Status, "InGame", StringComparison.OrdinalIgnoreCase) && current.Value.ActiveMatchId.HasValue)
+                {
+                    await BroadcastRoomChanged(hub, roomId, current.Value, ct);
+                    return Results.Ok(current.Value);
+                }
+            }
+            if (!result.IsSuccess) return Map(result);
+            await BroadcastRoomChanged(hub, roomId, result.Value!, ct);
+            return Results.Ok(result.Value);
+        });
         group.MapPost("/rooms/{roomId:guid}/rematch", async (Guid roomId, ClaimsPrincipal principal, LobbyApplicationService service, IHubContext<LobbyHub> hub, CancellationToken ct) => { var userId = GetUserId(principal); if (userId is null) return Results.Unauthorized(); var result = await service.RematchAsync(roomId, userId.Value, ct); if (!result.IsSuccess) return Map(result); await BroadcastMatchStarted(hub, roomId, result.Value!, ct); return Results.Ok(result.Value); });
         group.MapPost("/rooms/{roomId:guid}/leave", async (Guid roomId, ClaimsPrincipal principal, LobbyApplicationService service, IHubContext<LobbyHub> hub, CancellationToken ct) =>
         {
