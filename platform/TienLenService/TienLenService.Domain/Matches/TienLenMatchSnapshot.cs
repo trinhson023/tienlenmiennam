@@ -15,4 +15,5 @@ public sealed record TienLenMatchSnapshot(
     IReadOnlyList<Guid> WinnerOrder,
     IReadOnlyList<int> ActiveSeats,
     int? LastPlaySeat,
-    IReadOnlyList<MatchPlayerSnapshot> Players);
+    IReadOnlyList<MatchPlayerSnapshot> Players,
+    IReadOnlyList<string>? LastPlayedCards = null);
