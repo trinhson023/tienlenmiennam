@@ -18,12 +18,8 @@ public static class CombinationDetector
         if (ordered.Length == 3 && groups.Length == 1) return new Combination(CombinationType.Triple, ordered);
         if (ordered.Length == 4 && groups.Length == 1) return new Combination(CombinationType.FourOfAKind, ordered);
 
-        if (ordered.Length >= 3 && groups.Length == ordered.Length && ordered.All(x => x.Rank != Rank.Two))
-        {
-            var ranks = ordered.Select(x => (int)x.Rank).ToArray();
-            if (ranks.Zip(ranks.Skip(1), (a, b) => b - a).All(diff => diff == 1))
-                return new Combination(CombinationType.Straight, ordered);
-        }
+        if (StraightRules.TryGetStrength(ordered, out _))
+            return new Combination(CombinationType.Straight, ordered);
 
         return null;
     }

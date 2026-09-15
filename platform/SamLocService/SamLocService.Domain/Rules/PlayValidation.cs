@@ -23,7 +23,7 @@ public static class PlayValidation
         if (candidate.Type != center.Type || candidate.Count != center.Count)
             return PlayValidationResult.Failure("combination_mismatch", "Phải chặn bằng cùng loại và cùng số lá, trừ tứ quý chặt một quân 2.");
 
-        if ((int)candidate.HighestRank <= (int)center.HighestRank)
+        if (candidate.ComparisonStrength <= center.ComparisonStrength)
             return PlayValidationResult.Failure("combination_not_higher", "Bộ bài chặn phải lớn hơn bộ đang nằm trên bàn.");
 
         return PlayValidationResult.Success();

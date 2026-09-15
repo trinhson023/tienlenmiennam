@@ -7,8 +7,10 @@ public sealed class WhiteWinTests
 {
     private static Card[] Cards(string codes) => codes.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(CardCode.Parse).ToArray();
 
-    [Fact]
-    public void DetectsTenCardDragonStraight() => Assert.Equal(WhiteWinType.DragonStraight, WhiteWinDetector.Detect(Cards("3S,4C,5D,6H,7S,8C,9D,TH,JS,QC")));
+    [Theory]
+    [InlineData("AS,2C,3D,4H,5S,6C,7D,8H,9S,TC")]
+    [InlineData("3S,4C,5D,6H,7S,8C,9D,TH,JS,QC")]
+    public void DetectsTenCardDragonStraight(string codes) => Assert.Equal(WhiteWinType.DragonStraight, WhiteWinDetector.Detect(Cards(codes)));
 
     [Fact]
     public void DetectsFourTwos() => Assert.Equal(WhiteWinType.FourTwos, WhiteWinDetector.Detect(Cards("2S,2C,2D,2H,3S,4C,5D,7H,9S,JC")));

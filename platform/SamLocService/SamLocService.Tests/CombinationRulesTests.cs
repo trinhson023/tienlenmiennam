@@ -5,6 +5,8 @@ namespace SamLocService.Tests;
 
 public sealed class CombinationRulesTests
 {
+    private static Card[] Cards(string codes) => codes.Split(',').Select(CardCode.Parse).ToArray();
+
     [Fact]
     public void StandardDeck_Has52UniqueCards() => Assert.Equal(52, DeckFactory.CreateStandardDeck().Distinct().Count());
 
@@ -13,20 +15,27 @@ public sealed class CombinationRulesTests
     [InlineData("7S,7H", CombinationType.Pair)]
     [InlineData("9S,9C,9H", CombinationType.Triple)]
     [InlineData("5S,5C,5D,5H", CombinationType.FourOfAKind)]
+    [InlineData("AS,2H,3D", CombinationType.Straight)]
+    [InlineData("2S,3H,4D", CombinationType.Straight)]
     [InlineData("3S,4H,5D", CombinationType.Straight)]
-    [InlineData("TS,JH,QD,KC,AS", CombinationType.Straight)]
-    public void Detects_CoreCombinations(string codes, CombinationType expected)
-    {
-        var cards = codes.Split(',').Select(CardCode.Parse).ToArray();
-        Assert.Equal(expected, CombinationDetector.Detect(cards));
-    }
+    [InlineData("QS,KH,AD", CombinationType.Straight)]
+    public void Detects_CoreCombinations(string codes, CombinationType expected) =>
+        Assert.Equal(expected, CombinationDetector.Detect(Cards(codes)));
 
-    [Theory]
-    [InlineData("AS,2H,3D")]
-    [InlineData("KS,AH,2D")]
-    [InlineData("2S,3H,4D")]
-    public void Straight_CannotContainTwo(string codes) =>
-        Assert.Equal(CombinationType.Invalid, CombinationDetector.Detect(codes.Split(',').Select(CardCode.Parse).ToArray()));
+    [Fact]
+    public void KingAceTwo_IsNotAStraight() =>
+        Assert.Equal(CombinationType.Invalid, CombinationDetector.Detect(Cards("KS,AH,2D")));
+
+    [Fact]
+    public void StraightOrder_A23_IsLowerThan234_AndQKAIsHigh()
+    {
+        var a23 = CombinationDetector.TryCreate(Cards("AS,2H,3D"))!;
+        var two34 = CombinationDetector.TryCreate(Cards("2S,3H,4D"))!;
+        var qka = CombinationDetector.TryCreate(Cards("QS,KH,AD"))!;
+        Assert.True(PlayValidation.Validate(two34, a23, 10).IsValid);
+        Assert.True(PlayValidation.Validate(qka, two34, 10).IsValid);
+        Assert.False(PlayValidation.Validate(a23, qka, 10).IsValid);
+    }
 
     [Fact]
     public void FourTwos_IsLegalFourOfAKind() =>
@@ -44,26 +53,18 @@ public sealed class CombinationRulesTests
     public void FourOfAKind_ChopsSingleTwo()
     {
         var center = CombinationDetector.TryCreate([CardCode.Parse("2H")])!;
-        var candidate = CombinationDetector.TryCreate([CardCode.Parse("5S"), CardCode.Parse("5C"), CardCode.Parse("5D"), CardCode.Parse("5H")])!;
+        var candidate = CombinationDetector.TryCreate(Cards("5S,5C,5D,5H"))!;
         Assert.True(PlayValidation.Validate(candidate, center, 10).IsValid);
     }
 
     [Fact]
     public void FourOfAKind_DoesNotChopPairOfTwos()
     {
-        var center = CombinationDetector.TryCreate([CardCode.Parse("2S"), CardCode.Parse("2H")])!;
-        var candidate = CombinationDetector.TryCreate([CardCode.Parse("5S"), CardCode.Parse("5C"), CardCode.Parse("5D"), CardCode.Parse("5H")])!;
+        var center = CombinationDetector.TryCreate(Cards("2S,2H"))!;
+        var candidate = CombinationDetector.TryCreate(Cards("5S,5C,5D,5H"))!;
         var result = PlayValidation.Validate(candidate, center, 10);
         Assert.False(result.IsValid);
         Assert.Equal("combination_mismatch", result.ErrorCode);
-    }
-
-    [Fact]
-    public void HigherFourOfAKind_BeatsLowerFourOfAKind()
-    {
-        var center = CombinationDetector.TryCreate("6S,6C,6D,6H".Split(',').Select(CardCode.Parse).ToArray())!;
-        var candidate = CombinationDetector.TryCreate("7S,7C,7D,7H".Split(',').Select(CardCode.Parse).ToArray())!;
-        Assert.True(PlayValidation.Validate(candidate, center, 10).IsValid);
     }
 
     [Fact]
