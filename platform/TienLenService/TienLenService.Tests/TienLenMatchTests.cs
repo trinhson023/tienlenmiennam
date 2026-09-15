@@ -71,7 +71,7 @@ public class TienLenMatchTests
 
         Assert.True(reset.TrickReset);
         Assert.Empty(match.Center);
-        Assert.Equal(b, match.CurrentPlayerId); // legacy "hưởng sái" after A has already finished
+        Assert.Equal(b, match.CurrentPlayerId);
     }
 
     [Fact]
@@ -124,6 +124,34 @@ public class TienLenMatchTests
         Assert.True(result.PlayerFinished);
         Assert.True(result.MatchCompleted);
         Assert.Equal(new[] { a, b }, match.WinnerOrder);
+    }
+
+    [Fact]
+    public void FinalChopRemainsAvailableAsLastPlayedCardsWhenTrickResets()
+    {
+        var a = PlayerId.New(); var b = PlayerId.New(); var c = PlayerId.New(); var d = PlayerId.New();
+        var match = TienLenMatch.Create(MatchId.New(), new[]
+        {
+            new PlayerSetup(a, new SeatNumber(0), Cs("3S")),
+            new PlayerSetup(b, new SeatNumber(1), Cs("4S", "2H", "9S")),
+            new PlayerSetup(c, new SeatNumber(2), Cs("5C", "6S", "6C", "6D", "6H")),
+            new PlayerSetup(d, new SeatNumber(3), Cs("7S", "8S"))
+        });
+
+        Assert.True(match.PlayCards(a, Cs("3S")).PlayerFinished);
+        Assert.True(match.PlayCards(b, Cs("4S")).IsSuccess);
+        Assert.True(match.PlayCards(c, Cs("5C")).IsSuccess);
+        Assert.True(match.Pass(d).IsSuccess);
+        Assert.True(match.PlayCards(b, Cs("2H")).IsSuccess);
+
+        var chop = match.PlayCards(c, Cs("6S", "6C", "6D", "6H"));
+
+        Assert.True(chop.IsSuccess);
+        Assert.True(chop.IsChop);
+        Assert.True(chop.PlayerFinished);
+        Assert.True(chop.TrickReset);
+        Assert.Empty(match.Center);
+        Assert.Equal(new[] { "6S", "6C", "6D", "6H" }.OrderBy(x => x), match.LastPlayedCards.Select(x => x.Code).OrderBy(x => x));
     }
 
     [Fact]
