@@ -142,7 +142,7 @@ public sealed class TienLenMatchApplicationService(IMatchStore store, MatchRunti
         string[] hand = includeHand
             ? match.Players.Single(x => x.Id.Value == viewerUserId).Hand.Select(x => x.Code).ToArray()
             : Array.Empty<string>();
-        return new MatchStateView(match.Id.Value, runtime.RoomId, runtime.Version, match.Status.ToString(), currentId, currentIsBot, runtime.TurnDeadlineUtc, match.IsOpeningPlay, match.CenterType?.ToString(), match.Center.Select(x => x.Code).ToArray(), hand, players, match.WinnerOrder.Select(x => x.Value).ToArray());
+        return new MatchStateView(match.Id.Value, runtime.RoomId, runtime.Version, match.Status.ToString(), currentId, currentIsBot, runtime.TurnDeadlineUtc, match.IsOpeningPlay, match.CenterType?.ToString(), match.Center.Select(x => x.Code).ToArray(), match.LastPlayedCards.Select(x => x.Code).ToArray(), hand, players, match.WinnerOrder.Select(x => x.Value).ToArray());
     }
 
     private static void Shuffle(Card[] cards) { for (var i = cards.Length - 1; i > 0; i--) { var j = RandomNumberGenerator.GetInt32(i + 1); (cards[i], cards[j]) = (cards[j], cards[i]); } }
