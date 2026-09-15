@@ -42,9 +42,16 @@ public class PlayValidatorTests
     }
 
     [Fact]
-    public void CannotFinishWithAnyPlayContainingTwo()
+    public void CanFinishWithSingleTwo()
     {
         var result = PlayValidator.Validate(Cs("2H"), Array.Empty<TienLenService.Domain.Cards.Card>(), false, 1);
-        Assert.Equal(PlayValidationCode.CannotFinishWithTwo, result.Code);
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void CanFinishWithPairOfTwosWhenPairIsLegal()
+    {
+        var result = PlayValidator.Validate(Cs("2S", "2H"), Array.Empty<TienLenService.Domain.Cards.Card>(), false, 2);
+        Assert.True(result.IsValid);
     }
 }
