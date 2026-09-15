@@ -27,8 +27,8 @@
 - M5 — Tiến Lên application + realtime vertical slice ✅
 - M6 — Timer, bot, reconnect, persistence ✅
 - M7 — Vue gameplay migration ✅
-- M8 — Shared Social + Media + Stats ⏳ Phase 3 acceptance
-- M9 — Sâm Lốc service
+- M8 — Shared Social + Media + Stats ✅
+- M9 — Sâm Lốc service ⏭️
 - M10 — Cờ Tướng service (optional for first V3 merge)
 - M11 — Hardening
 - M12 — CI/CD and release readiness
@@ -37,7 +37,7 @@
 
 Final scope completed on `feat/dotnet-vue-microservices`: premium Vue gameplay table, SVG cards, authoritative timer, bots, selection/sorting, VFX/SFX, social parity, same-room rematch, return-to-lobby lifecycle and recovery polish.
 
-## M8 — Shared Social + Media + Stats
+## M8 — Shared Social + Media + Stats — CLOSED
 
 Phase 1 — Shared SocialService ✅ CLOSED (`1939cd6340ad8f1f616fc37d7544c580951fbdea`)
 - room chat / quick taunts / reactions
@@ -52,7 +52,7 @@ Phase 2 — Persistent Social + MediaService ✅ CLOSED (`0ee0ede7180a1f366dee0b
 - Shorts Lounge
 - persistent Media state across restart/rematch
 
-Phase 3 — StatisticsService ⏳ acceptance
+Phase 3 — StatisticsService ✅ CLOSED (`f202266257bf32767f56a560c4243dc6c0272d76`)
 - Tiến Lên writes `MatchCompleted` into a transactional DB outbox on the same save that marks the match Completed
 - MassTransit publishes the outbox to RabbitMQ
 - StatisticsService consumes `MatchCompleted` idempotently using `processed_matches`
@@ -60,6 +60,9 @@ Phase 3 — StatisticsService ⏳ acceptance
 - rating-ready per-game schema (`Rating` starts at 1000; no rating algorithm yet)
 - authenticated self stats / user stats / leaderboard endpoints
 - compact lobby Stats dock
+- runtime acceptance verified RabbitMQ-down completion durability, eventual outbox publish after broker recovery, duplicate delivery idempotency, persistence restart recovery, and responsive Stats UI
+
+M8 final accepted feature baseline: `f202266257bf32767f56a560c4243dc6c0272d76`.
 
 ## M9 — Sâm Lốc service
 
@@ -102,6 +105,8 @@ First release target: PvP before AI.
 - WebSocket proxy tests through Ocelot
 - replace single-instance room/media lifecycle locking with DB/distributed coordination before horizontal scale
 - replace in-memory social throttle with a distributed limiter before horizontal scale
+- consider extracting a shared integration-contract package before additional game services publish `MatchCompleted`
+- verify broker topology/queue bootstrap for first-deploy scenarios where a consumer queue has never existed before a producer publishes
 
 ## M12 — CI/CD and release readiness
 
@@ -133,7 +138,7 @@ The V3 branch cannot replace the current app until all critical items below pass
 - [x] Music Room
 - [x] Shorts Lounge
 - [x] persistent Tiến Lên match history/state
-- [ ] stats (Phase 3 runtime acceptance pending)
+- [x] stats
 - [x] Docker Compose core stack
 - [x] core Tiến Lên unit/integration tests green
 - [ ] Sâm playable end-to-end
