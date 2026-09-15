@@ -106,8 +106,18 @@ public sealed class LobbyApplicationService(ILobbyRepository repository, IMatchL
         if (room.Status == RoomStatus.InGame)
         {
             if (room.ActiveMatchId is null) return ServiceResult<LeaveRoomResult>.Failure("room_state_invalid", "Phòng đang chơi nhưng không có match hợp lệ.");
-            var abandoned = await matchLauncher.AbandonAsync(room.GameDefinition.Slug, room.ActiveMatchId.Value, userId, ct);
-            if (!abandoned.IsSuccess) return ServiceResult<LeaveRoomResult>.Failure(abandoned.ErrorCode ?? "game_service_error", abandoned.ErrorMessage ?? "Không thể bỏ ván hiện tại.");
+            var activeMatchId = room.ActiveMatchId.Value;
+            var abandoned = await matchLauncher.AbandonAsync(room.GameDefinition.Slug, activeMatchId, userId, ct);
+            if (!abandoned.IsSuccess)
+            {
+                if (abandoned.ErrorCode != "match_completed")
+                    return ServiceResult<LeaveRoomResult>.Failure(abandoned.ErrorCode ?? "game_service_error", abandoned.ErrorMessage ?? "Không thể bỏ ván hiện tại.");
+
+                var summary = await matchLauncher.GetSummaryAsync(room.GameDefinition.Slug, activeMatchId, ct);
+                if (!summary.IsSuccess || summary.MatchId != activeMatchId || summary.RoomId != room.Id || !string.Equals(summary.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+                    return ServiceResult<LeaveRoomResult>.Failure(summary.ErrorCode ?? "game_service_error", summary.ErrorMessage ?? "Không xác nhận được trạng thái ván vừa kết thúc.");
+                room.CompleteActiveMatch(activeMatchId);
+            }
         }
 
         if (!room.Leave(userId)) return ServiceResult<LeaveRoomResult>.Failure("not_in_room", "Bạn không ở trong phòng này.");
