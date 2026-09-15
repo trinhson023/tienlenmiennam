@@ -28,6 +28,7 @@
 - M6 — Timer, bot, reconnect, persistence ✅
 - M7 — Vue gameplay migration ✅
 - M8 — Shared Social + Media + Stats ✅
+- M8.1 — Room/table UX hotfix ⏳ acceptance
 - M9 — Sâm Lốc service ⏳ Phase 1 native domain acceptance
 - M10 — Cờ Tướng service (optional for first V3 merge)
 - M11 — Hardening
@@ -44,15 +45,29 @@ Phase 2 — Persistent Social + MediaService ✅ CLOSED (`0ee0ede7180a1f366dee0b
 Phase 3 — StatisticsService ✅ CLOSED (`f202266257bf32767f56a560c4243dc6c0272d76`)
 M8 final accepted feature baseline: `f202266257bf32767f56a560c4243dc6c0272d76`.
 
+## M8.1 — Room / table UX hotfix
+
+- room member can explicitly enter `/rooms/{roomId}/table` before a match exists
+- one player may sit at the waiting table; host can start once the game minimum player count is reached
+- leaving the table view does not relinquish the room seat
+- host can kick human members while the room is Open
+- host can delete an Open room
+- a human may abandon an in-progress Tiến Lên match and immediately leave the Lobby room
+- abandoned Tiến Lên seats become server-automated for the rest of that match; the abandoned account can no longer read hidden state, play/pass, or receive subsequent match broadcasts
+- remaining humans keep playing; if the host leaves, Lobby host ownership transfers to the next human member
+- Social/Media behavior is unchanged; it already follows Room membership and needs no M8.1 changes
+
+Acceptance must verify wait-table navigation, kick/delete authorization, host transfer, mid-match abandon security, bot takeover automation, persistence/restart of abandoned-seat state, and ability for the departed user to join another room immediately.
+
 ## M9 — Sâm Lốc service
 
 Phase 1 — Native Sâm domain ⏳ acceptance
 - 52-card model, 10-card deal, 2–4 players
 - suit-independent rank comparison (`3 ... A 2`)
 - single / pair / triple / straight / four-of-a-kind
-- straight excludes 2
+- Sâm straight ordering supports `A23 < 234 < ... < QKA`; `KA2` is invalid
 - four-of-a-kind chops one single 2 and higher four-of-a-kind beats lower
-- no finishing with rank 2
+- no finishing with rank 2 remains a V1 rule-profile decision to validate before realtime work
 - trick pass/reset semantics
 - explicit Báo Sâm declaration state
 - standard white-win shape detector
@@ -99,6 +114,7 @@ First release target: PvP before AI.
 - replace in-memory social throttle with a distributed limiter before horizontal scale
 - extract shared integration-contract package before additional game services publish `MatchCompleted`
 - verify broker topology/queue bootstrap for first-deploy scenarios where a consumer queue has never existed before a producer publishes
+- define competitive/statistics policy for abandoned seats (current casual behavior keeps the original human identity for match result aggregation while server automation controls the abandoned seat)
 
 ## M12 — CI/CD and release readiness
 
