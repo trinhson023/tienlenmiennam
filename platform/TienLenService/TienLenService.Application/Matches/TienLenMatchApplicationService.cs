@@ -80,7 +80,7 @@ public sealed class TienLenMatchApplicationService(IMatchStore store, MatchRunti
 
     public async Task<IReadOnlyList<Guid>> GetParticipantIdsAsync(Guid matchId, CancellationToken ct)
     {
-        var runtime = await store.GetAsync(matchId, ct); if (runtime is null) return [];
+        var runtime = await store.GetAsync(matchId, ct); if (runtime is null) return Array.Empty<Guid>();
         await runtime.Gate.WaitAsync(ct);
         try { return runtime.Players.Keys.Where(x => !runtime.IsAbandoned(x)).ToArray(); }
         finally { runtime.Gate.Release(); }
@@ -103,7 +103,7 @@ public sealed class TienLenMatchApplicationService(IMatchStore store, MatchRunti
     public async Task<MatchCommandResult> PassAsync(Guid matchId, Guid userId, long expectedVersion, CancellationToken ct)
     {
         var runtime = await store.GetAsync(matchId, ct); if (runtime is null) return MatchCommandResult.Failure("match_not_found", "Không tìm thấy ván chơi."); await runtime.Gate.WaitAsync(ct);
-        try { if (!runtime.Players.ContainsKey(userId) || runtime.IsAbandoned(userId)) return MatchCommandResult.Failure("not_match_player", "Bạn không thuộc ván này."); if (expectedVersion != runtime.Version) return MatchCommandResult.Failure("stale_state", "State của client đã cũ, hãy đồng bộ lại."); var result = runtime.Match.Pass(new PlayerId(userId)); if (!result.IsSuccess) return MatchCommandResult.Failure(result.Error.ToString(), result.Message ?? "Không thể bỏ lượt."); await CommitActionAsync(runtime, DateTimeOffset.UtcNow, ct); return MatchCommandResult.Success(Project(runtime, userId)); }
+        try { if (!runtime.Players.ContainsKey(userId) || runtime.IsAbandoned(userId)) return MatchCommandResult.Failure("not_match_player", "Bạn không thuộc ván này."); if (expectedVersion != runtime.Version) return MatchCommandResult.Failure("stale_state", "State của client đã cũ, hãy đồng bộ lại."); var result = runtime.Match.Pass(new PlayerId(userId)); if (!result.IsSuccess) return MatchCommandResult.Failure(result.Error.ToString(), result.Message ?? "Không thể bỏ lượt được."); await CommitActionAsync(runtime, DateTimeOffset.UtcNow, ct); return MatchCommandResult.Success(Project(runtime, userId)); }
         finally { runtime.Gate.Release(); }
     }
 
@@ -139,7 +139,9 @@ public sealed class TienLenMatchApplicationService(IMatchStore store, MatchRunti
         }).ToArray();
         var currentId = match.CurrentPlayerId?.Value;
         var currentIsBot = currentId.HasValue && runtime.Players.TryGetValue(currentId.Value, out var currentIdentity) && (currentIdentity.IsBot || runtime.IsAbandoned(currentId.Value));
-        var hand = includeHand ? match.Players.Single(x => x.Id.Value == viewerUserId).Hand.Select(x => x.Code).ToArray() : [];
+        string[] hand = includeHand
+            ? match.Players.Single(x => x.Id.Value == viewerUserId).Hand.Select(x => x.Code).ToArray()
+            : Array.Empty<string>();
         return new MatchStateView(match.Id.Value, runtime.RoomId, runtime.Version, match.Status.ToString(), currentId, currentIsBot, runtime.TurnDeadlineUtc, match.IsOpeningPlay, match.CenterType?.ToString(), match.Center.Select(x => x.Code).ToArray(), hand, players, match.WinnerOrder.Select(x => x.Value).ToArray());
     }
 
