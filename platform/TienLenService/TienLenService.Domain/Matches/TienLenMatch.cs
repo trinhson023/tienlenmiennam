@@ -8,6 +8,7 @@ public sealed class TienLenMatch
     private static readonly Card ThreeOfSpades = new(Rank.Three, Suit.Spades);
     private readonly List<MatchPlayer> _players;
     private readonly List<Card> _center = [];
+    private readonly List<Card> _lastPlayedCards = [];
     private readonly List<PlayerId> _winnerOrder = [];
     private readonly HashSet<SeatNumber> _activeSeats = [];
     private SeatNumber? _lastPlaySeat;
@@ -29,6 +30,7 @@ public sealed class TienLenMatch
     public bool IsOpeningPlay { get; private set; }
     public IReadOnlyList<MatchPlayer> Players => _players;
     public IReadOnlyList<Card> Center => _center;
+    public IReadOnlyList<Card> LastPlayedCards => _lastPlayedCards;
     public CombinationType? CenterType => _center.Count == 0 ? null : CombinationDetector.Detect(_center);
     public IReadOnlyList<PlayerId> WinnerOrder => _winnerOrder;
 
@@ -56,7 +58,8 @@ public sealed class TienLenMatch
             x.Id.Value,
             x.Seat.Value,
             x.Hand.Select(card => card.Code).ToArray(),
-            x.FinishPosition)).ToArray());
+            x.FinishPosition)).ToArray(),
+        _lastPlayedCards.Select(x => x.Code).ToArray());
 
     public static TienLenMatch Restore(TienLenMatchSnapshot snapshot)
     {
@@ -76,6 +79,8 @@ public sealed class TienLenMatch
 
         match._center.Clear();
         match._center.AddRange(snapshot.Center.Select(CardCode.Parse));
+        match._lastPlayedCards.Clear();
+        match._lastPlayedCards.AddRange((snapshot.LastPlayedCards ?? snapshot.Center).Select(CardCode.Parse));
         match._winnerOrder.Clear();
         match._winnerOrder.AddRange(snapshot.WinnerOrder.Select(x => new PlayerId(x)));
         match._activeSeats.Clear();
@@ -105,9 +110,12 @@ public sealed class TienLenMatch
         if (!validation.IsValid)
             return MatchActionResult.Failure(MatchActionError.InvalidPlay, validation.Message, validation.Code);
 
+        var orderedPlay = cards.OrderBy(x => x, CardComparer.Instance).ToArray();
         player.RemoveCards(cards);
         _center.Clear();
-        _center.AddRange(cards.OrderBy(x => x, CardComparer.Instance));
+        _center.AddRange(orderedPlay);
+        _lastPlayedCards.Clear();
+        _lastPlayedCards.AddRange(orderedPlay);
         _lastPlaySeat = player.Seat;
         IsOpeningPlay = false;
 
