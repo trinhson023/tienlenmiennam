@@ -6,6 +6,8 @@ public sealed record MatchPlayerIdentity(Guid UserId, int SeatNumber, string Use
 
 public sealed class MatchRuntime
 {
+    private readonly HashSet<Guid> _abandonedUserIds;
+
     public MatchRuntime(
         Guid roomId,
         TienLenMatch match,
@@ -14,7 +16,8 @@ public sealed class MatchRuntime
         DateTimeOffset? turnDeadlineUtc = null,
         DateTimeOffset? botActionDueUtc = null,
         DateTimeOffset? createdAtUtc = null,
-        DateTimeOffset? completedAtUtc = null)
+        DateTimeOffset? completedAtUtc = null,
+        IReadOnlyCollection<Guid>? abandonedUserIds = null)
     {
         RoomId = roomId;
         Match = match;
@@ -24,15 +27,20 @@ public sealed class MatchRuntime
         BotActionDueUtc = botActionDueUtc;
         CreatedAtUtc = createdAtUtc ?? DateTimeOffset.UtcNow;
         CompletedAtUtc = completedAtUtc;
+        _abandonedUserIds = abandonedUserIds?.ToHashSet() ?? [];
     }
 
     public Guid RoomId { get; }
     public TienLenMatch Match { get; }
     public IReadOnlyDictionary<Guid, MatchPlayerIdentity> Players { get; }
+    public IReadOnlyCollection<Guid> AbandonedUserIds => _abandonedUserIds;
     public long Version { get; set; }
     public DateTimeOffset? TurnDeadlineUtc { get; set; }
     public DateTimeOffset? BotActionDueUtc { get; set; }
     public DateTimeOffset CreatedAtUtc { get; }
     public DateTimeOffset? CompletedAtUtc { get; set; }
     public SemaphoreSlim Gate { get; } = new(1, 1);
+
+    public bool IsAbandoned(Guid userId) => _abandonedUserIds.Contains(userId);
+    public bool Abandon(Guid userId) => _abandonedUserIds.Add(userId);
 }
