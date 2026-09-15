@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import LobbyView from '@/views/LobbyView.vue'
+import WaitingTableView from '@/views/WaitingTableView.vue'
 import GameView from '@/views/GameView.vue'
 import FoundationView from '@/views/FoundationView.vue'
 import LoginView from '@/views/LoginView.vue'
@@ -10,6 +11,7 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', component: LobbyView, meta: { requiresAuth: true } },
+    { path: '/rooms/:roomId/table', component: WaitingTableView, meta: { requiresAuth: true } },
     { path: '/games/tien-len/:matchId', component: GameView, meta: { requiresAuth: true } },
     { path: '/foundation', component: FoundationView, meta: { requiresAuth: true } },
     { path: '/login', component: LoginView, meta: { guestOnly: true } },
