@@ -86,7 +86,7 @@ public class TienLenMatchTests
     [Fact]
     public void CannotPlayOutOfTurn()
     {
-        var (match, a, b) = TwoPlayerMatch(Cs("3S", "4S"), Cs("5S", "6S"));
+        var (match, _, b) = TwoPlayerMatch(Cs("3S", "4S"), Cs("5S", "6S"));
         var wrongTurn = match.PlayCards(b, Cs("5S"));
         Assert.False(wrongTurn.IsSuccess);
         Assert.Equal(MatchActionError.NotYourTurn, wrongTurn.Error);
@@ -105,24 +105,25 @@ public class TienLenMatchTests
     public void OpeningMoveCanBePairOrRunContainingThreeOfSpades()
     {
         var (matchPair, a1, _) = TwoPlayerMatch(Cs("3S", "3C"), Cs("5S", "6S"));
-        var playPair = matchPair.PlayCards(a1, Cs("3S", "3C"));
-        Assert.True(playPair.IsSuccess);
+        Assert.True(matchPair.PlayCards(a1, Cs("3S", "3C")).IsSuccess);
 
         var (matchRun, a2, _) = TwoPlayerMatch(Cs("3S", "4S", "5S"), Cs("7S", "8S", "9S"));
-        var playRun = matchRun.PlayCards(a2, Cs("3S", "4S", "5S"));
-        Assert.True(playRun.IsSuccess);
+        Assert.True(matchRun.PlayCards(a2, Cs("3S", "4S", "5S")).IsSuccess);
     }
 
     [Fact]
-    public void CannotFinishWithTwo()
+    public void CanFinishWithTwo()
     {
-        var (match, a, _) = TwoPlayerMatch(Cs("3S", "2H"), Cs("4S", "5S"));
+        var (match, a, b) = TwoPlayerMatch(Cs("3S", "2H"), Cs("4S", "5S"));
         Assert.True(match.PlayCards(a, Cs("3S")).IsSuccess);
-        // B passes, A opens the new trick and attempts to go out with the 2.
-        var b = match.Players.Single(x => x.Id != a).Id;
         Assert.True(match.Pass(b).IsSuccess);
+
         var result = match.PlayCards(a, Cs("2H"));
-        Assert.Equal(PlayValidationCode.CannotFinishWithTwo, result.ValidationCode);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(result.PlayerFinished);
+        Assert.True(result.MatchCompleted);
+        Assert.Equal(new[] { a, b }, match.WinnerOrder);
     }
 
     [Fact]
@@ -147,7 +148,6 @@ public class TienLenMatchTests
         });
 
         Assert.True(match.PlayCards(a, Cs("3S")).PlayerFinished);
-        // A finished. With B/C still active, B can beat 3 with 4 and finish.
         var result = match.PlayCards(b, Cs("4S"));
         Assert.True(result.MatchCompleted);
         Assert.Equal(new[] { a, b, c }, match.WinnerOrder);
