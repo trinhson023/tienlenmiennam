@@ -13,9 +13,16 @@ public sealed record MatchSummaryResult(bool IsSuccess, Guid? MatchId, Guid? Roo
     public static MatchSummaryResult Failure(string code, string message) => new(false, null, null, null, code, message);
 }
 
+public sealed record MatchBridgeResult(bool IsSuccess, string? ErrorCode, string? ErrorMessage)
+{
+    public static MatchBridgeResult Success() => new(true, null, null);
+    public static MatchBridgeResult Failure(string code, string message) => new(false, code, message);
+}
+
 public interface IMatchLauncher
 {
     Task<MatchLaunchResult> StartAsync(string gameSlug, Guid roomId, IReadOnlyCollection<MatchLaunchPlayer> players, CancellationToken cancellationToken);
     Task<MatchLaunchResult> RematchAsync(string gameSlug, Guid previousMatchId, Guid roomId, IReadOnlyCollection<MatchLaunchPlayer> players, CancellationToken cancellationToken);
     Task<MatchSummaryResult> GetSummaryAsync(string gameSlug, Guid matchId, CancellationToken cancellationToken);
+    Task<MatchBridgeResult> AbandonAsync(string gameSlug, Guid matchId, Guid userId, CancellationToken cancellationToken);
 }
