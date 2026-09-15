@@ -7,7 +7,6 @@ public enum PlayValidationCode
     Valid = 0,
     InvalidCombination,
     OpeningThreeOfSpadesRequired,
-    CannotFinishWithTwo,
     DoesNotMatchCenter,
     DoesNotBeatCenter
 }
@@ -40,8 +39,10 @@ public static class PlayValidator
         if (openingThreeOfSpadesRequired && !combination.Cards.Contains(ThreeOfSpades))
             return PlayValidationResult.Invalid(PlayValidationCode.OpeningThreeOfSpadesRequired, "First Play Must Include 3♠", combination);
 
-        if (totalCardsInHand > 0 && combination.Count == totalCardsInHand && combination.Cards.Any(c => c.Rank == Rank.Two))
-            return PlayValidationResult.Invalid(PlayValidationCode.CannotFinishWithTwo, "Không được về bằng Heo (Thối Heo)", combination);
+        // Southern Tiến Lên is a shedding game: a legal 2 (heo) may be the final play.
+        // "Thối heo" belongs to settlement/scoring rules for twos left unplayed when
+        // somebody else finishes; it must not make an otherwise legal final play invalid.
+        _ = totalCardsInHand;
 
         if (center is null || center.Count == 0) return PlayValidationResult.Valid(combination);
 
