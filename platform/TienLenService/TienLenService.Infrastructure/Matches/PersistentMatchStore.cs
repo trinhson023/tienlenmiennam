@@ -104,7 +104,10 @@ public sealed class PersistentMatchStore(IDbContextFactory<TienLenDbContext> dbF
         record.RoomId = runtime.RoomId;
         record.Status = (int)runtime.Match.Status;
         record.Version = runtime.Version;
-        record.SnapshotJson = JsonSerializer.Serialize(new PersistedEnvelope(runtime.Match.CaptureSnapshot(), runtime.Players.Values.OrderBy(x => x.SeatNumber).ToArray()), JsonOptions);
+        record.SnapshotJson = JsonSerializer.Serialize(new PersistedEnvelope(
+            runtime.Match.CaptureSnapshot(),
+            runtime.Players.Values.OrderBy(x => x.SeatNumber).ToArray(),
+            runtime.AbandonedUserIds.ToArray()), JsonOptions);
         record.TurnDeadlineUtc = runtime.TurnDeadlineUtc;
         record.BotActionDueUtc = runtime.BotActionDueUtc;
         record.UpdatedAtUtc = now;
@@ -116,10 +119,19 @@ public sealed class PersistentMatchStore(IDbContextFactory<TienLenDbContext> dbF
         var envelope = JsonSerializer.Deserialize<PersistedEnvelope>(record.SnapshotJson, JsonOptions)
             ?? throw new InvalidOperationException($"Cannot deserialize Tiến Lên match {record.Id}.");
         var match = TienLenMatch.Restore(envelope.Match);
-        return new MatchRuntime(record.RoomId, match, envelope.Players, record.Version, record.TurnDeadlineUtc, record.BotActionDueUtc, record.CreatedAtUtc, record.CompletedAtUtc);
+        return new MatchRuntime(
+            record.RoomId,
+            match,
+            envelope.Players,
+            record.Version,
+            record.TurnDeadlineUtc,
+            record.BotActionDueUtc,
+            record.CreatedAtUtc,
+            record.CompletedAtUtc,
+            envelope.AbandonedUserIds ?? []);
     }
 
-    private sealed record PersistedEnvelope(TienLenMatchSnapshot Match, MatchPlayerIdentity[] Players);
+    private sealed record PersistedEnvelope(TienLenMatchSnapshot Match, MatchPlayerIdentity[] Players, Guid[]? AbandonedUserIds = null);
     private sealed record OutboxMatchCompleted(Guid EventId, Guid MatchId, Guid RoomId, string GameSlug, DateTimeOffset CompletedAtUtc, OutboxMatchCompletedPlayer[] Players);
     private sealed record OutboxMatchCompletedPlayer(Guid UserId, string Username, string DisplayName, int SeatNumber, bool IsBot, int FinishPosition);
 }
