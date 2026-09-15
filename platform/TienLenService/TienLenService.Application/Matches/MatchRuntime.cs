@@ -27,7 +27,7 @@ public sealed class MatchRuntime
         BotActionDueUtc = botActionDueUtc;
         CreatedAtUtc = createdAtUtc ?? DateTimeOffset.UtcNow;
         CompletedAtUtc = completedAtUtc;
-        _abandonedUserIds = abandonedUserIds?.ToHashSet() ?? [];
+        _abandonedUserIds = abandonedUserIds?.ToHashSet() ?? new HashSet<Guid>();
     }
 
     public Guid RoomId { get; }
