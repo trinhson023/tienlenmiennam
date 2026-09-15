@@ -128,7 +128,7 @@ public sealed class PersistentMatchStore(IDbContextFactory<TienLenDbContext> dbF
             record.BotActionDueUtc,
             record.CreatedAtUtc,
             record.CompletedAtUtc,
-            envelope.AbandonedUserIds ?? []);
+            envelope.AbandonedUserIds ?? Array.Empty<Guid>());
     }
 
     private sealed record PersistedEnvelope(TienLenMatchSnapshot Match, MatchPlayerIdentity[] Players, Guid[]? AbandonedUserIds = null);
