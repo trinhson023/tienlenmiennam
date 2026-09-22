@@ -41,6 +41,15 @@ public static class MatchEndpoints
             CancellationToken ct) =>
         {
             if (!HasInternalKey(http, configuration)) return Results.Unauthorized();
+
+            // Keep the same stale-client recovery contract as Tiến Lên. If Lobby
+            // already points at a newly created Sâm match and a reconnecting client
+            // asks to rematch again with that active match id, return it as success.
+            var current = await matches.GetSummaryAsync(matchId, ct);
+            if (current is not null &&
+                !string.Equals(current.Status, "Completed", StringComparison.OrdinalIgnoreCase))
+                return Results.Ok(CreateMatchResult.Success(matchId));
+
             var result = await matches.CreateRematchAsync(matchId, request, ct);
             if (!result.IsSuccess)
                 return result.ErrorCode is "rematch_not_ready" or "rematch_roster_changed" or "rematch_room_mismatch"
