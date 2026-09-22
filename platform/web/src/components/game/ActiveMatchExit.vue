@@ -3,24 +3,34 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useLobbyStore } from '@/stores/lobby'
 import { useTienLenStore } from '@/stores/tienlen'
+import { useSamLocStore } from '@/stores/samloc'
 
 const route = useRoute()
 const router = useRouter()
 const lobby = useLobbyStore()
-const game = useTienLenStore()
+const tienLen = useTienLenStore()
+const sam = useSamLocStore()
 const busy = ref(false)
 const error = ref('')
-const visible = computed(() => route.path.startsWith('/games/tien-len/') && game.match?.status === 'InProgress')
+
+const isTienLen = computed(() => route.path.startsWith('/games/tien-len/'))
+const isSam = computed(() => route.path.startsWith('/games/sam-loc/'))
+const activeStore = computed(() => isSam.value ? sam : tienLen)
+const visible = computed(() =>
+  (isTienLen.value || isSam.value) &&
+  ['Declaring', 'InProgress'].includes(activeStore.value.match?.status || '')
+)
 
 async function abandon() {
-  const roomId = game.match?.roomId
+  const roomId = activeStore.value.match?.roomId
   if (!roomId || busy.value) return
-  if (!window.confirm('Bỏ ván và rời phòng? Bot sẽ đánh tiếp ghế của bạn để không phá ván của người còn lại.')) return
+  if (!window.confirm('Bỏ ván và rời phòng? Bot sẽ takeover ghế của bạn để người còn lại vẫn chơi tiếp.')) return
+
   busy.value = true
   error.value = ''
   try {
     await lobby.leaveRoom(roomId)
-    await game.leaveView()
+    await activeStore.value.leaveView()
     await router.replace('/')
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Không thể bỏ ván.'
