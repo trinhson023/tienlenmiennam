@@ -19,7 +19,7 @@ const hasEmptySeat = computed(() => !!room.value && room.value.members.length < 
 
 function memberAt(seat: number) { return room.value?.members.find(x => x.seatNumber === seat) }
 function messageFrom(e: unknown, fallback: string) { return axios.isAxiosError(e) ? (e.response?.data?.message || fallback) : fallback }
-function gameRoute(matchId: string) { return room.value?.gameSlug === 'tien-len' ? `/games/tien-len/${matchId}` : '/' }
+function gameRoute(matchId: string) { return room.value?.gameSlug === 'sam-loc' ? `/games/sam-loc/${matchId}` : `/games/tien-len/${matchId}` }
 
 async function start() { error.value=''; try { const result = await lobby.startCurrentMatch(); if (result?.activeMatchId) await router.replace(gameRoute(result.activeMatchId)) } catch(e) { error.value=messageFrom(e,'Không bắt đầu được ván.') } }
 async function addBot() { error.value=''; try { await lobby.addBot() } catch(e) { error.value=messageFrom(e,'Không thêm được bot.') } }
