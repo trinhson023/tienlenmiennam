@@ -15,6 +15,7 @@ public sealed class PersistentMatchStore(IDbContextFactory<SamLocDbContext> dbFa
     public async Task<bool> TryAddAsync(MatchRuntime runtime, CancellationToken ct)
     {
         if (!_cache.TryAdd(runtime.Match.Id, runtime)) return false;
+
         try
         {
             await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -66,9 +67,53 @@ public sealed class PersistentMatchStore(IDbContextFactory<SamLocDbContext> dbFa
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var record = await db.Matches.SingleAsync(x => x.Id == runtime.Match.Id, ct);
-        Apply(record, runtime, DateTimeOffset.UtcNow);
+
+        var completedNow =
+            record.Status != (int)SamMatchStatus.Completed &&
+            runtime.Match.Status == SamMatchStatus.Completed;
+
+        var now = DateTimeOffset.UtcNow;
+        Apply(record, runtime, now);
+
+        if (completedNow)
+            db.Outbox.Add(BuildMatchCompletedOutbox(runtime, now));
+
         await db.SaveChangesAsync(ct);
         _cache[runtime.Match.Id] = runtime;
+    }
+
+    private static SamLocOutboxRecord BuildMatchCompletedOutbox(MatchRuntime runtime, DateTimeOffset now)
+    {
+        var eventId = Guid.NewGuid();
+        var winnerId = runtime.Match.WinnerId;
+
+        var players = runtime.Players.Values
+            .OrderBy(x => x.SeatNumber)
+            .Select(identity => new OutboxMatchCompletedPlayer(
+                identity.UserId,
+                identity.Username,
+                identity.DisplayName,
+                identity.SeatNumber,
+                identity.IsBot,
+                identity.UserId == winnerId ? 1 : 2))
+            .ToArray();
+
+        var payload = new OutboxMatchCompleted(
+            eventId,
+            runtime.Match.Id,
+            runtime.RoomId,
+            "sam-loc",
+            runtime.CompletedAtUtc ?? now,
+            players);
+
+        return new SamLocOutboxRecord
+        {
+            Id = eventId,
+            MatchId = runtime.Match.Id,
+            EventType = "MatchCompleted",
+            PayloadJson = JsonSerializer.Serialize(payload, JsonOptions),
+            CreatedAtUtc = now
+        };
     }
 
     private static SamLocMatchRecord ToRecord(MatchRuntime runtime, DateTimeOffset now)
@@ -79,6 +124,7 @@ public sealed class PersistentMatchStore(IDbContextFactory<SamLocDbContext> dbFa
             RoomId = runtime.RoomId,
             CreatedAtUtc = runtime.CreatedAtUtc
         };
+
         Apply(record, runtime, now);
         return record;
     }
@@ -88,11 +134,13 @@ public sealed class PersistentMatchStore(IDbContextFactory<SamLocDbContext> dbFa
         record.RoomId = runtime.RoomId;
         record.Status = (int)runtime.Match.Status;
         record.Version = runtime.Version;
-        record.SnapshotJson = JsonSerializer.Serialize(new PersistedEnvelope(
-            runtime.Match.CaptureSnapshot(),
-            runtime.Players.Values.OrderBy(x => x.SeatNumber).ToArray(),
-            runtime.AbandonedUserIds.ToArray(),
-            runtime.DefaultStarterUserId), JsonOptions);
+        record.SnapshotJson = JsonSerializer.Serialize(
+            new PersistedEnvelope(
+                runtime.Match.CaptureSnapshot(),
+                runtime.Players.Values.OrderBy(x => x.SeatNumber).ToArray(),
+                runtime.AbandonedUserIds.ToArray(),
+                runtime.DefaultStarterUserId),
+            JsonOptions);
         record.DeclarationDeadlineUtc = runtime.DeclarationDeadlineUtc;
         record.TurnDeadlineUtc = runtime.TurnDeadlineUtc;
         record.BotActionDueUtc = runtime.BotActionDueUtc;
@@ -124,4 +172,20 @@ public sealed class PersistentMatchStore(IDbContextFactory<SamLocDbContext> dbFa
         MatchPlayerIdentity[] Players,
         Guid[]? AbandonedUserIds,
         Guid DefaultStarterUserId);
+
+    private sealed record OutboxMatchCompleted(
+        Guid EventId,
+        Guid MatchId,
+        Guid RoomId,
+        string GameSlug,
+        DateTimeOffset CompletedAtUtc,
+        OutboxMatchCompletedPlayer[] Players);
+
+    private sealed record OutboxMatchCompletedPlayer(
+        Guid UserId,
+        string Username,
+        string DisplayName,
+        int SeatNumber,
+        bool IsBot,
+        int FinishPosition);
 }

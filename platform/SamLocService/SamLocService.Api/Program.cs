@@ -1,9 +1,11 @@
 using System.Text;
+using MassTransit;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SamLocService.Api;
 using SamLocService.Api.Hubs;
+using SamLocService.Api.Integration;
 using SamLocService.Application.Matches;
 using SamLocService.Domain.Cards;
 using SamLocService.Domain.Rules;
@@ -19,6 +21,18 @@ builder.Services.AddAuthorization();
 builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
     policy.AllowAnyHeader().AllowAnyMethod().SetIsOriginAllowed(_ => true).AllowCredentials()));
 
+builder.Services.AddMassTransit(x => x.UsingRabbitMq((context, cfg) =>
+{
+    cfg.Host(
+        builder.Configuration["RabbitMq:Host"] ?? "rabbitmq",
+        builder.Configuration["RabbitMq:VirtualHost"] ?? "/",
+        h =>
+        {
+            h.Username(builder.Configuration["RabbitMq:Username"] ?? "guest");
+            h.Password(builder.Configuration["RabbitMq:Password"] ?? "guest");
+        });
+}));
+
 var declarationSeconds = int.TryParse(builder.Configuration["Match:DeclarationSeconds"], out var parsedDeclaration) ? parsedDeclaration : 5;
 var turnSeconds = int.TryParse(builder.Configuration["Match:TurnSeconds"], out var parsedTurn) ? parsedTurn : 60;
 var botMinDelay = int.TryParse(builder.Configuration["Match:BotMinDelayMs"], out var parsedBotMin) ? parsedBotMin : 800;
@@ -28,6 +42,7 @@ builder.Services.AddSingleton(new MatchRuntimeSettings(declarationSeconds, turnS
 builder.Services.AddScoped<SamMatchApplicationService>();
 builder.Services.AddScoped<MatchBroadcaster>();
 builder.Services.AddHostedService<MatchAutomationWorker>();
+builder.Services.AddHostedService<MatchOutboxPublisherWorker>();
 
 var jwt = builder.Configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings();
 if (jwt.Secret.Length < 32) throw new InvalidOperationException("Jwt:Secret must contain at least 32 characters.");
@@ -45,12 +60,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Secret)),
         ClockSkew = TimeSpan.FromSeconds(30)
     };
+
     options.Events = new JwtBearerEvents
     {
         OnMessageReceived = context =>
         {
             var token = context.Request.Query["access_token"];
-            if (!string.IsNullOrWhiteSpace(token) && context.HttpContext.Request.Path.StartsWithSegments("/hubs/samloc"))
+            if (!string.IsNullOrWhiteSpace(token) &&
+                context.HttpContext.Request.Path.StartsWithSegments("/hubs/samloc"))
                 context.Token = token;
             return Task.CompletedTask;
         }
@@ -58,6 +75,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
 });
 
 var app = builder.Build();
+
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();

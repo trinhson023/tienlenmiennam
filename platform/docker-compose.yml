@@ -54,8 +54,8 @@ services:
 
   samloc-api:
     build: { context: ./SamLocService, dockerfile: SamLocService.Api/Dockerfile }
-    environment: { ASPNETCORE_URLS: "http://+:8080", ASPNETCORE_ENVIRONMENT: Development, Database__Provider: Postgres, ConnectionStrings__RoyalDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-royal_game};Username=${POSTGRES_USER:-royal};Password=${POSTGRES_PASSWORD:-royal_dev}", Jwt__Secret: "${JWT_SECRET:-CHANGE_ME_IN_REAL_ENVIRONMENT_MINIMUM_32_CHARS}", InternalApi__Key: "${INTERNAL_API_KEY:-royal_game_internal_dev_key_change_me}", Match__DeclarationSeconds: "${SAMLOC_DECLARATION_SECONDS:-5}", Match__TurnSeconds: "${SAMLOC_TURN_SECONDS:-60}", Match__BotMinDelayMs: "${SAMLOC_BOT_MIN_DELAY_MS:-800}", Match__BotMaxDelayMs: "${SAMLOC_BOT_MAX_DELAY_MS:-1400}" }
-    depends_on: { postgres: { condition: service_healthy } }
+    environment: { ASPNETCORE_URLS: "http://+:8080", ASPNETCORE_ENVIRONMENT: Development, Database__Provider: Postgres, ConnectionStrings__RoyalDatabase: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-royal_game};Username=${POSTGRES_USER:-royal};Password=${POSTGRES_PASSWORD:-royal_dev}", Jwt__Secret: "${JWT_SECRET:-CHANGE_ME_IN_REAL_ENVIRONMENT_MINIMUM_32_CHARS}", InternalApi__Key: "${INTERNAL_API_KEY:-royal_game_internal_dev_key_change_me}", RabbitMq__Host: rabbitmq, RabbitMq__Username: "${RABBITMQ_DEFAULT_USER:-guest}", RabbitMq__Password: "${RABBITMQ_DEFAULT_PASS:-guest}", Match__DeclarationSeconds: "${SAMLOC_DECLARATION_SECONDS:-5}", Match__TurnSeconds: "${SAMLOC_TURN_SECONDS:-60}", Match__BotMinDelayMs: "${SAMLOC_BOT_MIN_DELAY_MS:-800}", Match__BotMaxDelayMs: "${SAMLOC_BOT_MAX_DELAY_MS:-1400}" }
+    depends_on: { postgres: { condition: service_healthy }, rabbitmq: { condition: service_healthy } }
     ports: ["5107:8080"]
 
   api-gateway:
