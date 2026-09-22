@@ -22,5 +22,5 @@ public sealed class WhiteWinTests
     public void DetectsThreeTriples() => Assert.Equal(WhiteWinType.ThreeTriples, WhiteWinDetector.Detect(Cards("3S,3C,3D,5S,5C,5D,7S,7C,7D,AH")));
 
     [Fact]
-    public void DetectsFivePairs() => Assert.Equal(WhiteWinType.FivePairs, WhiteWinDetector.Detect(Cards("3S,3C,5S,5C,7S,7C,9S,9C,JS,JC")));
+    public void DetectsFivePairs() => Assert.Equal(WhiteWinType.FivePairs, WhiteWinDetector.Detect(Cards("3S,3H,5S,5D,7S,7C,9S,9C,JS,JC")));
 }
