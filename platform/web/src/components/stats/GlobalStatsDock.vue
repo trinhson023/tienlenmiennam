@@ -2,29 +2,38 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useLobbyStore } from '@/stores/lobby'
 import { useStatsStore } from '@/stores/stats'
 
 const route = useRoute()
 const auth = useAuthStore()
+const lobby = useLobbyStore()
 const stats = useStatsStore()
 const open = ref(false)
+
 const visible = computed(() => auth.isAuthenticated && route.path === '/')
+const gameSlug = computed(() => lobby.selectedGame || 'tien-len')
+const gameName = computed(() => lobby.games.find(x => x.slug === gameSlug.value)?.displayName || gameSlug.value)
 
 watch(open, value => { if (value) void refresh() })
-async function refresh() { try { await stats.load('tien-len') } catch { /* error shown in panel */ } }
+watch(gameSlug, () => { if (open.value) void refresh() })
+
+async function refresh() {
+  try { await stats.load(gameSlug.value) } catch { /* error shown in panel */ }
+}
 </script>
 
 <template>
   <aside v-if="visible" class="stats-dock">
     <button class="stats-toggle" type="button" @click="open = !open">🏆 Stats</button>
     <section v-if="open" class="stats-panel">
-      <header><div><small>TIẾN LÊN</small><b>THỐNG KÊ CỦA BẠN</b></div><button type="button" @click="open=false">×</button></header>
+      <header><div><small>{{ gameName.toUpperCase() }}</small><b>THỐNG KÊ CỦA BẠN</b></div><button type="button" @click="open=false">×</button></header>
       <p v-if="stats.error" class="error" role="alert">{{ stats.error }}</p>
       <template v-if="stats.me">
         <div class="my-grid"><div><strong>{{ stats.me.gamesPlayed }}</strong><span>Ván</span></div><div><strong>{{ stats.me.wins }}</strong><span>Thắng</span></div><div><strong>{{ stats.me.losses }}</strong><span>Thua</span></div><div><strong>{{ stats.me.winRate }}%</strong><span>Win rate</span></div></div>
         <div class="rating">Rating-ready <b>{{ stats.me.rating }}</b></div>
       </template>
-      <div class="board-head"><b>BXH BÀN CHƠI</b><button type="button" :disabled="stats.loading" @click="refresh">↻</button></div>
+      <div class="board-head"><b>BXH {{ gameName.toUpperCase() }}</b><button type="button" :disabled="stats.loading" @click="refresh">↻</button></div>
       <ol class="leaderboard">
         <li v-for="row in stats.leaderboard.slice(0,5)" :key="row.userId"><span>#{{ row.rank }}</span><b>{{ row.displayName || row.username }}</b><small>{{ row.wins }}W · {{ row.gamesPlayed }} ván · {{ row.winRate }}%</small></li>
         <li v-if="!stats.loading && !stats.leaderboard.length" class="empty">Chưa có dữ liệu xếp hạng.</li>
