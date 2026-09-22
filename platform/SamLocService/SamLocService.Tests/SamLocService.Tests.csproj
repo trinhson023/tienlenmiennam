@@ -5,5 +5,6 @@
     <PackageReference Include="xunit" Version="2.6.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.4"><PrivateAssets>all</PrivateAssets></PackageReference>
     <ProjectReference Include="..\SamLocService.Domain\SamLocService.Domain.csproj" />
+    <ProjectReference Include="..\SamLocService.Application\SamLocService.Application.csproj" />
   </ItemGroup>
 </Project>

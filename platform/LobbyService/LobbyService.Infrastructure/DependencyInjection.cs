@@ -12,21 +12,32 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        var cs = configuration.GetConnectionString("RoyalDatabase") ?? throw new InvalidOperationException("ConnectionStrings:RoyalDatabase is required.");
+        var cs = configuration.GetConnectionString("RoyalDatabase")
+            ?? throw new InvalidOperationException("ConnectionStrings:RoyalDatabase is required.");
         var provider = configuration["Database:Provider"]?.Trim().ToLowerInvariant() ?? "postgres";
+
         services.AddDbContext<LobbyDbContext>(options =>
         {
             if (provider is "sqlserver" or "mssql") options.UseSqlServer(cs);
             else if (provider is "postgres" or "postgresql") options.UseNpgsql(cs);
             else throw new NotSupportedException($"Unsupported database provider '{provider}'.");
         });
+
         services.AddScoped<ILobbyRepository, LobbyRepository>();
         services.AddScoped<LobbySeeder>();
-        services.AddHttpClient<IMatchLauncher, TienLenMatchLauncher>(client =>
+
+        services.AddHttpClient("tienlen-match", client =>
         {
             client.BaseAddress = new Uri(configuration["TienLenService:BaseUrl"] ?? "http://tienlen-api:8080");
             client.Timeout = TimeSpan.FromSeconds(10);
         });
+        services.AddHttpClient("samloc-match", client =>
+        {
+            client.BaseAddress = new Uri(configuration["SamLocService:BaseUrl"] ?? "http://samloc-api:8080");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
+        services.AddScoped<IMatchLauncher, GameMatchLauncher>();
+
         return services;
     }
 }
