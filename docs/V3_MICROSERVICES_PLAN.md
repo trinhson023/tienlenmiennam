@@ -28,8 +28,8 @@
 - M6 — Timer, bot, reconnect, persistence ✅
 - M7 — Vue gameplay migration ✅
 - M8 — Shared Social + Media + Stats ✅
-- M8.1 — Room/table UX hotfix ⏳ acceptance
-- M9 — Sâm Lốc service ⏳ Phase 1 native domain acceptance
+- M8.1 — Room/table UX hotfix ✅ CLOSED (`6a311cb616a7d21358d11124e4e87a39f6cd59ea`)
+- M9 — Sâm Lốc service ⏳ Phase 3 Vue + Statistics acceptance
 - M10 — Cờ Tướng service (optional for first V3 merge)
 - M11 — Hardening
 - M12 — CI/CD and release readiness
@@ -61,7 +61,7 @@ Acceptance must verify wait-table navigation, kick/delete authorization, host tr
 
 ## M9 — Sâm Lốc service
 
-Phase 1 — Native Sâm domain ⏳ acceptance
+Phase 1 — Native Sâm domain ✅ CLOSED (`e63a0ca4d8f8b7407c2c305674fd4570869c8691`)
 - 52-card model, 10-card deal, 2–4 players
 - suit-independent rank comparison (`3 ... A 2`)
 - single / pair / triple / straight / four-of-a-kind
@@ -73,13 +73,18 @@ Phase 1 — Native Sâm domain ⏳ acceptance
 - standard white-win shape detector
 - snapshot/restore boundary for later persistence
 
-Later M9 phases:
-- Application/API vertical slice + Lobby integration
-- declaration timer, authoritative turn timer, bots
-- PostgreSQL recovery + rematch/history
-- shared Social/Media room integration
-- `MatchCompleted` publication into StatisticsService
-- Vue Sâm board + responsive parity
+Phase 2 — Application/API/realtime/persistence ✅ CLOSED (`a4591c426e96d222ed443075a4f52445b84c9d4c`)
+- Lobby launcher routes `sam-loc` into SamLocService
+- declaration timer, authoritative turn timer and bot automation
+- PostgreSQL recovery, rematch catch-up and abandon/bot takeover
+- REST + SignalR exposed through Gateway and Docker
+
+Phase 3 — Vue + shared integration ⏳ acceptance
+- Vue Sâm board + responsive table parity
+- room-level Social/Media available during Sâm gameplay
+- Sâm `MatchCompleted` transactional outbox into StatisticsService
+- lobby catalog enabled only once Vue route exists
+- stats dock switches between Tiến Lên and Sâm by selected game
 
 Rule decisions are frozen in `docs/SAM_LOC_RULES_V1.md` before realtime work proceeds.
 
