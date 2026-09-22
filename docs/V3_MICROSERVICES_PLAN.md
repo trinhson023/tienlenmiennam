@@ -29,7 +29,7 @@
 - M7 — Vue gameplay migration ✅
 - M8 — Shared Social + Media + Stats ✅
 - M8.1 — Room/table UX hotfix ✅ CLOSED (`6a311cb616a7d21358d11124e4e87a39f6cd59ea`)
-- M9 — Sâm Lốc service ⏳ Phase 3 Vue + Statistics acceptance
+- M9 — Sâm Lốc service ✅ CLOSED (`e1ef14945220df9cae30067420bc4e7e52f7c1d9`)
 - M10 — Cờ Tướng service (optional for first V3 merge)
 - M11 — Hardening
 - M12 — CI/CD and release readiness
@@ -79,7 +79,7 @@ Phase 2 — Application/API/realtime/persistence ✅ CLOSED (`a4591c426e96d222ed
 - PostgreSQL recovery, rematch catch-up and abandon/bot takeover
 - REST + SignalR exposed through Gateway and Docker
 
-Phase 3 — Vue + shared integration ⏳ acceptance
+Phase 3 — Vue + shared integration ✅ CLOSED (`e1ef14945220df9cae30067420bc4e7e52f7c1d9`)
 - Vue Sâm board + responsive table parity
 - room-level Social/Media available during Sâm gameplay
 - Sâm `MatchCompleted` transactional outbox into StatisticsService
@@ -105,7 +105,7 @@ First release target: PvP before AI.
 ## M11 — Hardening
 
 - idempotent event handling ✅ introduced for Statistics `MatchCompleted`
-- producer outbox ✅ introduced for Tiến Lên stats events
+- producer outbox ✅ introduced for Tiến Lên and Sâm stats events
 - structured Serilog logs
 - correlation IDs
 - health/readiness checks
@@ -154,7 +154,7 @@ The V3 branch cannot replace the current app until all critical items below pass
 - [x] stats
 - [x] Docker Compose core stack
 - [x] core Tiến Lên unit/integration tests green
-- [ ] Sâm playable end-to-end
+- [x] Sâm playable end-to-end
 - [ ] LAN test from at least two devices
 - [x] hidden-card projection reviewed through M5–M7 acceptance
 - [x] legacy boardgame.io no longer required for the V3 Tiến Lên runtime
